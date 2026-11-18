@@ -1,0 +1,132 @@
+/* ==========================================================
+   Classic theme — a light, early-2010s software-site look
+   (centered white page, title header, uppercase | nav bar,
+   Verdana text, blue headings, simple bordered boxes).
+   Loaded after each page's own <style>, so it overrides it.
+   ========================================================== */
+:root {
+  --c-blue: #1d4f91;
+  --c-link: #0b5cad;
+  --c-line: #c3d1e2;
+  --c-soft: #f3f7fc;
+  --gold: #1d4f91; --ember: #b8401f; --text: #222; --muted: #555;
+  --earth: #ffffff; --panel: #f7f9fc; --panel2: #f3f7fc; --dusk: #f3f7fc;
+  --display: "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
+  --body: Verdana, Tahoma, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+
+html { background: #d5dfeb linear-gradient(180deg, #b9cbe0 0, #d5dfeb 260px) no-repeat; }
+body { background: transparent; color: #222; font-family: var(--body); font-size: 13px; line-height: 1.6; padding: 18px 10px 30px; }
+a { color: var(--c-link); }
+a:hover { color: #d2691e; }
+
+/* ---- page frame ---- */
+.sm-side, .sm-page { max-width: 980px; margin-left: auto; margin-right: auto; background: #fff; border-left: 1px solid #9fb2c9; border-right: 1px solid #9fb2c9; }
+
+/* ---- header: logo + title, then the horizontal nav ---- */
+.sm-side { position: static; width: auto; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0;
+  padding: 16px 20px 0; border-top: 1px solid #9fb2c9; border-bottom: 0; box-shadow: none; }
+.sm-brand { padding: 0 0 14px; gap: 12px; }
+.sm-brand svg path:not([stroke="#fff"]) { stroke: var(--c-blue); }
+.sm-brand svg path[stroke="#fff"] { stroke: #8a9bb3; }
+.sm-brand svg circle { fill: var(--c-blue); }
+.sm-brand b { font: bold 32px/1 var(--display); color: var(--c-blue); letter-spacing: 0; text-transform: none; }
+.sm-brand small { font: italic 12px/1.4 var(--body); color: #666; letter-spacing: 0; margin-top: 4px; }
+.sm-side .sm-toggle { display: none; }
+.sm-side .sm-foot { display: none; }
+.sm-side .sm-cta { display: inline-flex; margin: 0 0 14px auto; width: auto; padding: 7px 14px; border-radius: 3px; font: bold 13px/1 var(--body);
+  color: #fff; background: linear-gradient(180deg, #4f94dc, #1d5fa8); border: 1px solid #174f8c; box-shadow: inset 0 1px 0 rgba(255,255,255,.35); }
+.sm-side .sm-cta:hover { background: linear-gradient(180deg, #62a3e6, #2468b4); }
+
+.sm-brand { order: 0; } .sm-side .sm-cta { order: 1; } .sm-side .sm-nav { order: 2; }
+.sm-side .sm-nav { display: flex; flex-direction: row; flex-wrap: wrap; flex-basis: calc(100% + 40px); gap: 0; margin: 0 -20px; padding: 7px 14px;
+  background: linear-gradient(180deg, #f4f8fd, #d9e5f3); border-top: 1px solid #a9bcd3; border-bottom: 1px solid #a9bcd3; }
+.sm-link { display: inline-block; padding: 0 10px; border-radius: 0; font: bold 12px/1.5 var(--body); letter-spacing: .5px; text-transform: uppercase;
+  color: var(--c-blue); border-left: 1px solid #9fb2c9; }
+.sm-link:first-child { border-left: 0; }
+.sm-link svg { display: none; }
+.sm-link:hover { background: none; color: #d2691e; text-decoration: underline; }
+.sm-link[aria-current="page"] { background: none; color: #000; box-shadow: none; }
+
+.sm-page { margin-top: 0; border-bottom: 1px solid #9fb2c9; box-shadow: 0 2px 6px rgba(40, 70, 110, .18); }
+.wrap { max-width: none; padding-left: 24px; padding-right: 24px; }
+
+/* ---- type ---- */
+h1, h2, h3 { font-family: var(--display); font-weight: bold; letter-spacing: 0; }
+section { padding-block: 22px; }
+section h2, .hero h2 { font-size: 20px; color: var(--c-blue); border-bottom: 1px solid var(--c-line); padding-bottom: 4px; }
+h3 { color: var(--c-blue); }
+.intro, section .intro { color: #444; }
+p { color: #333; }
+
+/* ---- intro block ---- */
+.hero { background: linear-gradient(180deg, #ffffff, #eef4fb); border-bottom: 1px solid var(--c-line); color: #222; }
+.hero .wrap { padding-block: 26px; }
+.hero h1 { font-size: 30px; line-height: 1.2; color: var(--c-blue); text-shadow: none; }
+.hero p, .hero .lede, .hero .sub { color: #333; font-size: 14px; }
+.eyebrow, .tag { background: #e4edf8; color: var(--c-blue); border: 1px solid var(--c-line); border-radius: 2px; letter-spacing: .5px; }
+
+/* ---- buttons: plain bordered, like old download buttons ---- */
+.btn, a.btn, .vbtn, .watch, .support, .copy button { font: bold 13px/1.2 var(--body); color: var(--c-blue); text-decoration: none; border-radius: 3px;
+  padding: 7px 14px; border: 1px solid #8ea4c1; background: linear-gradient(180deg, #ffffff, #e2eaf4); box-shadow: none; text-shadow: none; }
+.btn:hover, .vbtn:hover, .watch:hover, .support:hover { background: linear-gradient(180deg, #ffffff, #d3e1f1); border-color: #5d82b0; color: var(--c-blue); }
+.btn.play, .card .btn.play { color: #fff; background: linear-gradient(180deg, #4f94dc, #1d5fa8); border-color: #174f8c; box-shadow: inset 0 1px 0 rgba(255,255,255,.35); }
+.btn.play:hover { background: linear-gradient(180deg, #62a3e6, #2468b4); color: #fff; }
+.btn.ghost { background: linear-gradient(180deg, #ffffff, #e2eaf4); border-color: #8ea4c1; font-size: 13px; }
+.btn.live { color: #fff; background: linear-gradient(180deg, #e8505e, #b81f2e); border-color: #8e1622; }
+.btn.yt-btn svg { width: 20px; height: 14px; }
+.card .btn { font-size: 13px; padding: 6px 12px; }
+
+/* ---- boxes ---- */
+.band { background: #f6f9fc; border-top: 1px solid #e1e8f1; border-bottom: 1px solid #e1e8f1; }
+.card, .tile, .topic, .unit, .chapter, .ver, .ctrl, .news li, .steps li, .trailer .frame, .tv-card {
+  background: #fff; border: 1px solid var(--c-line); border-radius: 3px; box-shadow: none; color: #222; }
+.card h3, .tile b, .topic h3, .unit h3, .chapter h3, .ver h3, .ctrl h3, .steps b, .tv-card h4 { color: var(--c-blue); font-family: var(--display); font-weight: bold; }
+.card h3 { font-size: 18px; }
+.tile b, .topic h3 { font-size: 16px; }
+.card p, .tile span, .topic p, .unit p, .chapter p, .ver p { color: #444; font-size: 13px; }
+.card .meta { color: #b8401f; letter-spacing: .5px; }
+.tile:hover { border-color: #5d82b0; background: var(--c-soft); }
+.tile svg { color: var(--c-blue); }
+
+/* news: dated entries like a changelog */
+.news { gap: 0; }
+.news li { border: 0; border-bottom: 1px dotted #aab9cc; border-radius: 0; background: none; padding: 10px 0; }
+.news .v { font: bold 15px var(--display); color: var(--c-blue); }
+.news .d { color: #777; font-weight: normal; }
+
+.rules, .note, .support-note { background: #fffbe6; border-left: 4px solid #e0a800; color: #333; }
+.copy code, code { background: #f4f6f9; color: #333; border: 1px solid #d5dde8; }
+
+/* ---- footer ---- */
+footer { border-top: 1px solid var(--c-line); background: #f6f9fc; color: #666; font-size: 12px; text-align: center; padding-block: 16px 20px; }
+footer a.v16 { background: #e4edf8; color: var(--c-blue); border: 1px solid var(--c-line); border-radius: 3px; font-weight: bold; }
+
+@media (max-width: 820px) {
+  body { padding: 0; }
+  .sm-side, .sm-page { border-left: 0; border-right: 0; }
+  .sm-side { position: static; padding: 12px 14px 0; }
+  .sm-side .sm-cta { margin: 0 0 12px 0; }
+  .sm-side .sm-nav { margin: 0 -14px; padding: 6px 4px; flex-basis: calc(100% + 28px); }
+  .sm-link { padding: 2px 8px; }
+  .wrap { padding-left: 14px; padding-right: 14px; }
+}
+
+/* ---- Stick Legions page extras ---- */
+.trailer, section[style*="#1e1714"] { background: #f6f9fc !important; border-top: 1px solid #e1e8f1; border-bottom: 1px solid #e1e8f1; }
+.trailer .frame { border: 1px solid #8ea4c1; box-shadow: none; border-radius: 3px; }
+.hero { border-bottom: 1px solid var(--c-line); }
+.hero-shot img, .hero-shot { border-radius: 3px; border-color: #8ea4c1 !important; box-shadow: none; }
+.status { color: #8a5a00; }
+.steps li::before, .unit .key, .ver .badge { background: var(--c-blue); color: #fff; }
+.ver .badge.old { background: #e4e8ee; color: #666; }
+.ver .badge.next { background: #b8401f; color: #fff; }
+.ver.soon { background: #fafbfd; border: 1px dashed #aab9cc; }
+.vbtn.off { color: #888; background: #f2f2f2; border-color: #ccc; }
+.support { color: #fff; background: linear-gradient(180deg, #e0558a, #b0184f); border-color: #8e1440; border-radius: 3px; }
+.foot-links a.v16 { background: #e4edf8; color: var(--c-blue) !important; border: 1px solid var(--c-line); border-radius: 3px; }
+.ctrl dt, .ctrl dd, .chapter .ch, .unit .cost { color: #333; }
+
+/* buttons used inline inside sentences */
+p .btn, p a.btn, .intro .btn { padding: 1px 6px; font-size: 12px; vertical-align: baseline; }
