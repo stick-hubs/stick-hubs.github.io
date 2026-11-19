@@ -1,16 +1,16 @@
 diff --git a/scripts/sl-patch-scratch-blocks.cjs b/scripts/sl-patch-scratch-blocks.cjs
 new file mode 100644
-index 0000000..d24d7e0
+index 0000000..af4e38e
 --- /dev/null
 +++ b/scripts/sl-patch-scratch-blocks.cjs
-@@ -0,0 +1,37 @@
+@@ -0,0 +1,44 @@
 +// Stick Lab: classic, squarer block shapes.
 +// Run after `npm ci` and before building: node scripts/sl-patch-scratch-blocks.cjs
 +const fs = require('fs');
 +const path = require('path');
 +const file = path.join(__dirname, '..', 'node_modules', 'scratch-blocks', 'blockly_compressed_vertical.js');
 +let s = fs.readFileSync(file, 'utf8');
-+if (s.includes('/*sticklab-shapes*/')) {
++if (s.includes('slAeroGloss')) {
 +    console.log('scratch-blocks already patched');
 +    process.exit(0);
 +}
@@ -33,6 +33,13 @@ index 0000000..d24d7e0
 +    // ...and the right edge, drawn downwards
 +    ['this.edgeShape_===Blockly.OUTPUT_SHAPE_ROUND?a.push("a "+this.edgeShapeWidth_+" "+this.edgeShapeWidth_+" 0 0 1 0 "+2*this.edgeShapeWidth_)',
 +        'this.edgeShape_===Blockly.OUTPUT_SHAPE_ROUND?a.push("h "+(this.edgeShapeWidth_-4)+" a 4 4 0 0 1 4 4 v "+(2*this.edgeShapeWidth_-8)+" a 4 4 0 0 1 -4 4 h "+-(this.edgeShapeWidth_-4))']
++    ,
++    // Aero shine: a glossy highlight drawn over the top of every block
++    ['this.svgPath_.setAttribute("d",a);this.RTL&&this.svgPath_.setAttribute("transform","scale(-1 1)")};',
++        'this.svgPath_.setAttribute("d",a);this.RTL&&this.svgPath_.setAttribute("transform","scale(-1 1)");' +
++        'this.slGloss_||(this.slGloss_=Blockly.utils.createSvgElement("path",{"class":"slAeroGloss","fill":"url(#slAeroGloss)","pointer-events":"none"},null),' +
++        'this.svgGroup_.insertBefore(this.slGloss_,this.svgPath_.nextSibling));this.slGloss_.setAttribute("d",a);' +
++        'this.RTL&&this.slGloss_.setAttribute("transform","scale(-1 1)")};']
 +];
 +for (const [from, to] of swaps) {
 +    const count = s.split(from).length - 1;
@@ -45,7 +52,7 @@ diff --git a/src/components/action-menu/icon--sprite.svg b/src/components/action
 index 12c4a8b..b743363 100644
 Binary files a/src/components/action-menu/icon--sprite.svg and b/src/components/action-menu/icon--sprite.svg differ
 diff --git a/src/components/gui/gui.css b/src/components/gui/gui.css
-index ad44099..b8bac73 100644
+index ad44099..bda246b 100644
 --- a/src/components/gui/gui.css
 +++ b/src/components/gui/gui.css
 @@ -235,13 +235,14 @@
@@ -61,7 +68,7 @@ index ad44099..b8bac73 100644
 -    z-index: $z-index-extension-button;
 +    z-index: 50;
      background: $looks-secondary;
-+    background-image: linear-gradient(180deg, #4f94dc, #1d5fa8);
++    background-image: linear-gradient(180deg, #9fd0f7 0%, #5ea6e8 45%, #2a6ab8 50%, #3a87d6 100%);
  
      border: 1px solid $looks-secondary;
      box-sizing: content-box; /* To match scratch-block vertical toolbox borders */
@@ -709,10 +716,10 @@ index 0000000..e9ce1e9
 +export default connect(mapStateToProps)(TextCodeEditor);
 diff --git a/src/components/sl-text-code/text-code.css b/src/components/sl-text-code/text-code.css
 new file mode 100644
-index 0000000..1b71b99
+index 0000000..b28bce4
 --- /dev/null
 +++ b/src/components/sl-text-code/text-code.css
-@@ -0,0 +1,286 @@
+@@ -0,0 +1,287 @@
 +/* Stick Lab: Blocks/Text switch and Text coding editor (classic Stick Hubs style) */
 +
 +.toggle {
@@ -753,8 +760,8 @@ index 0000000..1b71b99
 +.toggle-active,
 +.toggle-active:hover {
 +    color: #1d4f91;
-+    background: linear-gradient(180deg, #ffffff, #dce8f6);
-+    box-shadow: inset 0 0 0 1px #8ea4c1;
++    background: linear-gradient(180deg, #ffffff 0%, #f2f6fb 45%, #dde7f3 50%, #e8eff8 100%);
++    box-shadow: inset 0 0 0 1px #8ea4c1, inset 0 2px 0 rgba(255, 255, 255, 0.9);
 +}
 +
 +/* ---- editor ---- */
@@ -818,7 +825,7 @@ index 0000000..1b71b99
 +    border: 1px solid #c3d1e2;
 +    border-left-width: 4px;
 +    border-radius: 2px;
-+    background: linear-gradient(180deg, #ffffff, #e6eef8);
++    background: linear-gradient(180deg, #ffffff 0%, #f2f6fb 45%, #dde7f3 50%, #e8eff8 100%);
 +    color: #1d4f91;
 +    font: bold 0.75rem Verdana, Tahoma, sans-serif;
 +    text-align: left;
@@ -874,7 +881,7 @@ index 0000000..1b71b99
 +    display: flex;
 +    align-items: center;
 +    padding: 0.35rem 0.6rem;
-+    background: linear-gradient(180deg, #f4f8fd, #d9e5f3);
++    background: linear-gradient(180deg, #fdfeff 0%, #ebf2fb 45%, #d6e4f5 50%, #e3edf9 100%);
 +    border-bottom: 1px solid #a9bcd3;
 +}
 +
@@ -900,7 +907,8 @@ index 0000000..1b71b99
 +    padding: 0.25rem 0.6rem;
 +    border: 1px solid #8ea4c1;
 +    border-radius: 3px;
-+    background: linear-gradient(180deg, #ffffff, #e2eaf4);
++    background: linear-gradient(180deg, #ffffff 0%, #f2f6fb 45%, #dde7f3 50%, #e8eff8 100%);
++    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
 +    cursor: pointer;
 +}
 +
@@ -1339,29 +1347,32 @@ index 01f29db..a866883 100644
          }
 diff --git a/src/lib/sl-classic-ui.js b/src/lib/sl-classic-ui.js
 new file mode 100644
-index 0000000..1a10d4b
+index 0000000..b3681f7
 --- /dev/null
 +++ b/src/lib/sl-classic-ui.js
-@@ -0,0 +1,266 @@
+@@ -0,0 +1,313 @@
 +// Stick Lab: classic Stick Hubs restyle of the whole editor.
 +// Same layout as Scratch; glossy blue headers and buttons, square-ish panels, thin blue-grey borders.
 +// Component class names look like "gui_tab_x1y2z", so [class*="file_class_"] targets them.
 +
 +const css = `
 +:root {
-+    --sl-line: #a9bcd3;
++    --sl-line: #9db4cf;
 +    --sl-line-soft: #c3d1e2;
 +    --sl-blue: #1d4f91;
 +    --sl-blue-mid: #2a6ab8;
-+    --sl-head: linear-gradient(180deg, #f7faff 0%, #dbe6f3 100%);
-+    --sl-button: linear-gradient(180deg, #ffffff 0%, #e2eaf4 100%);
-+    --sl-button-hover: linear-gradient(180deg, #ffffff 0%, #d3e1f1 100%);
-+    --sl-blue-button: linear-gradient(180deg, #5a9de2 0%, #2a6ab8 55%, #1d5fa8 100%);
++    /* Aero: glossy split gradients (bright top half, deeper bottom half) */
++    --sl-head: linear-gradient(180deg, #fdfeff 0%, #ebf2fb 45%, #d6e4f5 50%, #e3edf9 100%);
++    --sl-button: linear-gradient(180deg, #ffffff 0%, #f2f6fb 45%, #dde7f3 50%, #e8eff8 100%);
++    --sl-button-hover: linear-gradient(180deg, #f4faff 0%, #ddf0ff 45%, #bfe0fb 50%, #d4ecfd 100%);
++    --sl-blue-button: linear-gradient(180deg, #9fd0f7 0%, #5ea6e8 45%, #2a6ab8 50%, #3a87d6 100%);
++    --sl-glass-shadow: 0 0 0 1px rgba(255, 255, 255, 0.65), 0 2px 8px rgba(30, 70, 120, 0.2);
++    --sl-shine: inset 0 1px 0 rgba(255, 255, 255, 0.9);
 +}
 +
 +/* page background */
 +[class*="gui_body-wrapper_"], [class*="gui_flex-wrapper_"] {
-+    background: #d9e3ef !important;
++    background: linear-gradient(180deg, #d4e3f4 0%, #c3d6ec 100%) !important;
 +}
 +
 +/* ---- Script / Costumes / Sounds tabs ---- */
@@ -1380,10 +1391,17 @@ index 0000000..1a10d4b
 +[class*="gui_tab_"]:hover {
 +    background: linear-gradient(180deg, #ffffff 0%, #e6eef8 100%) !important;
 +}
++[class*="gui_tab_"] {
++    box-shadow: var(--sl-shine) !important;
++}
++[class*="gui_tab_"]:hover {
++    background: var(--sl-button-hover) !important;
++    border-color: #3c7fb1 !important;
++}
 +[class*="gui_tab_"][class*="gui_is-selected_"] {
-+    background: #ffffff !important;
++    background: linear-gradient(180deg, #ffffff 0%, #f6faff 100%) !important;
 +    color: #000000 !important;
-+    box-shadow: inset 0 3px 0 var(--sl-blue-mid) !important;
++    box-shadow: inset 0 2px 0 #5ea6e8, 0 -1px 6px rgba(94, 166, 232, 0.45) !important;
 +}
 +[class*="gui_tab_"] img {
 +    filter: hue-rotate(0deg) saturate(1.1);
@@ -1396,6 +1414,7 @@ index 0000000..1a10d4b
 +    border-radius: 0 !important;
 +}
 +[class*="gui_blocks-wrapper_"] {
++    box-shadow: var(--sl-glass-shadow) !important;
 +    border: 1px solid var(--sl-line) !important;
 +    border-radius: 0 3px 3px 3px !important;
 +    overflow: hidden;
@@ -1406,7 +1425,9 @@ index 0000000..1a10d4b
 +
 +/* block categories: square colour chips, classic selected row */
 +.scratchCategoryItemBubble {
-+    border-radius: 2px !important;
++    border-radius: 3px !important;
++    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.2) 46%, rgba(255, 255, 255, 0) 52%) !important;
++    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
 +}
 +.scratchCategoryMenu {
 +    background: linear-gradient(90deg, #f7faff, #e9f0f9) !important;
@@ -1431,6 +1452,7 @@ index 0000000..1a10d4b
 +    background: var(--sl-button) !important;
 +    border: 1px solid #8ea4c1 !important;
 +    border-radius: 3px !important;
++    box-shadow: var(--sl-shine) !important;
 +}
 +[class*="stage-header_stage-button_"]:hover {
 +    background: var(--sl-button-hover) !important;
@@ -1456,25 +1478,26 @@ index 0000000..1a10d4b
 +[class*="stage_stage_"] {
 +    border: 1px solid var(--sl-line) !important;
 +    border-radius: 3px !important;
++    box-shadow: var(--sl-glass-shadow) !important;
 +}
 +
 +/* ---- sprite info ---- */
 +[class*="sprite-info_sprite-info_"] {
 +    border: 1px solid var(--sl-line) !important;
 +    border-radius: 3px 3px 0 0 !important;
-+    background: linear-gradient(180deg, #ffffff 0%, #f1f5fb 100%) !important;
-+    box-shadow: none !important;
++    background: var(--sl-head) !important;
++    box-shadow: var(--sl-glass-shadow) !important;
 +}
 +[class*="sprite-info_label_"] {
 +    color: var(--sl-blue) !important;
 +    font-weight: bold;
 +}
-+[class*="input_input-form_"] {
++[class*="sprite-info_sprite-info_"] [class*="input_input-form_"] {
 +    border-radius: 3px !important;
 +    border: 1px solid #8ea4c1 !important;
 +    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
 +}
-+[class*="input_input-form_"]:focus {
++[class*="sprite-info_sprite-info_"] [class*="input_input-form_"]:focus {
 +    border-color: var(--sl-blue-mid) !important;
 +    box-shadow: 0 0 0 2px rgba(42, 106, 184, 0.25) !important;
 +}
@@ -1490,13 +1513,14 @@ index 0000000..1a10d4b
 +    background: #eef3fa !important;
 +}
 +[class*="sprite-selector-item_sprite-selector-item_"] {
-+    border-radius: 3px !important;
++    border-radius: 4px !important;
 +    border: 1px solid var(--sl-line-soft) !important;
-+    background: linear-gradient(180deg, #ffffff 0%, #f1f5fb 100%) !important;
-+    box-shadow: none !important;
++    background: var(--sl-button) !important;
++    box-shadow: var(--sl-shine) !important;
 +}
 +[class*="sprite-selector-item_sprite-selector-item_"]:hover {
-+    border-color: #5d82b0 !important;
++    border-color: #3c7fb1 !important;
++    background: var(--sl-button-hover) !important;
 +}
 +[class*="sprite-selector-item_is-selected_"] {
 +    border: 2px solid var(--sl-blue-mid) !important;
@@ -1535,7 +1559,8 @@ index 0000000..1a10d4b
 +[class*="action-menu_button_"] {
 +    border-radius: 8px !important;
 +    background: var(--sl-blue-button) !important;
-+    box-shadow: 0 2px 4px rgba(29, 79, 145, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35) !important;
++    border: 1px solid #1b4f8f !important;
++    box-shadow: 0 2px 6px rgba(29, 79, 145, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.25) !important;
 +}
 +[class*="action-menu_more-buttons_"] {
 +    border-radius: 8px 8px 0 0 !important;
@@ -1572,6 +1597,17 @@ index 0000000..1a10d4b
 +/* ---- buttons in menus and modals ---- */
 +[class*="modal_header_"] {
 +    background: var(--sl-blue-button) !important;
++    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
++}
++[class*="sprite-info_sprite-info_"] [class*="input_input-form_"] {
++    background-color: #ffffff;
++}
++/* Aero shine on blocks: dim it a little on white input slots */
++.blocklyDraggable > .slAeroGloss {
++    mix-blend-mode: normal;
++}
++.blocklyNonSelectable.blocklyDraggable[data-shapes~="argument"] > .slAeroGloss {
++    display: none;
 +}
 +[class*="library_library-scroll-grid_"] {
 +    background: #eef3fa !important;
@@ -1601,7 +1637,26 @@ index 0000000..1a10d4b
 +    style.id = 'stick-lab-classic-ui';
 +    style.textContent = css;
 +    // Added at the end of <head> so it comes after the editor's own styles.
-+    const add = () => document.head.appendChild(style);
++    const add = () => {
++        document.head.appendChild(style);
++        // Gradient used by the Aero shine on every block (see scripts/sl-patch-scratch-blocks.cjs).
++        const svgNS = 'http://www.w3.org/2000/svg';
++        const svg = document.createElementNS(svgNS, 'svg');
++        svg.setAttribute('width', '0');
++        svg.setAttribute('height', '0');
++        svg.setAttribute('aria-hidden', 'true');
++        svg.style.position = 'absolute';
++        svg.innerHTML =
++            '<defs><linearGradient id="slAeroGloss" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="46">' +
++            '<stop offset="0" stop-color="#ffffff" stop-opacity="0.55"/>' +
++            '<stop offset="0.42" stop-color="#ffffff" stop-opacity="0.22"/>' +
++            '<stop offset="0.5" stop-color="#ffffff" stop-opacity="0.04"/>' +
++            '<stop offset="1" stop-color="#ffffff" stop-opacity="0"/>' +
++            '</linearGradient></defs>';
++        const addSvg = () => document.body.appendChild(svg);
++        if (document.body) addSvg();
++        else document.addEventListener('DOMContentLoaded', addSvg);
++    };
 +    if (document.head) add();
 +    else document.addEventListener('DOMContentLoaded', add);
 +};
@@ -3148,7 +3203,7 @@ index 0000000..019d8f1
 +};
 diff --git a/src/lib/themes/accent/classic.js b/src/lib/themes/accent/classic.js
 new file mode 100644
-index 0000000..7f435c1
+index 0000000..71bea78
 --- /dev/null
 +++ b/src/lib/themes/accent/classic.js
 @@ -0,0 +1,30 @@
@@ -3170,7 +3225,7 @@ index 0000000..7f435c1
 +
 +    'drop-highlight': '#8fbdf0',
 +
-+    'menu-bar-background-image': 'linear-gradient(180deg, #5a9de2 0%, #2a6ab8 55%, #1d5fa8 100%)'
++    'menu-bar-background-image': 'linear-gradient(180deg, #a3d2f7 0%, #62a7e8 46%, #2a6ab8 50%, #3283d6 100%)'
 +};
 +
 +const blockColors = {
