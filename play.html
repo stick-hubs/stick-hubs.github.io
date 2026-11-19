@@ -174,7 +174,7 @@ body.is-fullscreen #sm-back{display:none}
 @media (max-width:520px){#sm-back{padding:5px 8px;font-size:12px}#sm-title{font-size:13px}}
 
   </style>
-  <meta name="theme-color" content="#120e1a">
+  <meta name="theme-color" content="#d5dfeb">
   
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="favicon.ico" sizes="48x48">
@@ -189,6 +189,7 @@ body.is-fullscreen #sm-back{display:none}
 <meta property="og:url" content="https://stick-manx.github.io/play.html">
 <meta property="og:image" content="https://stick-manx.github.io/hero2.jpg">
 <meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="classic-game.css">
 </head>
 <body>
   <div id="app"></div>
@@ -293,7 +294,7 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
       };
 
       scaffolding.setUsername("player####".replace(/#/g, () => Math.floor(Math.random() * 10)));
-      scaffolding.setAccentColor("#ffcf3f");
+      scaffolding.setAccentColor("#1d4f91");
 
       try {
         {const providers = {};
@@ -2822,7 +2823,7 @@ var qrcode = function() {
     var t = setInterval(function () { var v = stageVar('autoRoom'); if (v) { v.value = room; clearInterval(t); } }, 30);
   }
   var box = document.createElement('div');
-  box.style.cssText = 'position:fixed;display:none;z-index:20;background:#fff;border:4px solid #ffcf3f;border-radius:12px;padding:6px 6px 2px;text-align:center;font:bold 13px sans-serif;color:#1a0f05;box-shadow:0 4px 16px rgba(0,0,0,.5)';
+  box.style.cssText = 'position:fixed;display:none;z-index:20;background:#fff;border:1px solid #8ea4c1;border-radius:3px;padding:6px 6px 2px;text-align:center;font:bold 13px sans-serif;color:#1a0f05;box-shadow:0 4px 16px rgba(0,0,0,.5)';
   var img = document.createElement('img'); img.style.cssText = 'display:block;width:100%;image-rendering:pixelated';
   var cap = document.createElement('div'); cap.textContent = 'Scan to join'; cap.style.cssText = 'padding-top:3px';
   box.appendChild(img); box.appendChild(cap); document.body.appendChild(box);

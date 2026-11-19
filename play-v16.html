@@ -174,7 +174,7 @@ body.is-fullscreen #sm-back{display:none}
 @media (max-width:520px){#sm-back{padding:5px 8px;font-size:12px}#sm-title{font-size:13px}}
 
   </style>
-  <meta name="theme-color" content="#120e1a">
+  <meta name="theme-color" content="#d5dfeb">
   
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="favicon.ico" sizes="48x48">
@@ -189,6 +189,7 @@ body.is-fullscreen #sm-back{display:none}
 <meta property="og:url" content="https://stick-manx.github.io/play-v16.html">
 <meta property="og:image" content="https://stick-manx.github.io/hero2.jpg">
 <meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="classic-game.css">
 </head>
 <body>
   <div id="app"></div>
@@ -293,7 +294,7 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
       };
 
       scaffolding.setUsername("player####".replace(/#/g, () => Math.floor(Math.random() * 10)));
-      scaffolding.setAccentColor("#ffcf3f");
+      scaffolding.setAccentColor("#1d4f91");
 
       try {
         scaffolding.addCloudProvider(new Scaffolding.Cloud.WebSocketProvider(["wss://clouddata.turbowarp.org","wss://clouddata.turbowarp.xyz"], "stick-manx-stick-legions"));

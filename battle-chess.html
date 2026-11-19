@@ -142,7 +142,7 @@
     }
     #app{top:40px!important;height:calc(100% - 40px)!important}body.is-fullscreen #app{top:0!important;height:100%!important}body.is-fullscreen #smbar{display:none}
   </style>
-  <meta name="theme-color" content="#120e1a">
+  <meta name="theme-color" content="#d5dfeb">
   
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="favicon.ico" sizes="48x48">
@@ -157,6 +157,7 @@
 <meta property="og:url" content="https://stick-manx.github.io/battle-chess.html">
 <meta property="og:image" content="https://stick-manx.github.io/hero2.jpg">
 <meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="classic-game.css">
 </head>
 <body>
   <div id="app"></div>
@@ -259,7 +260,7 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
       };
 
       scaffolding.setUsername("player####".replace(/#/g, () => Math.floor(Math.random() * 10)));
-      scaffolding.setAccentColor("#ffcf3f");
+      scaffolding.setAccentColor("#1d4f91");
 
       try {
         scaffolding.addCloudProvider(new Scaffolding.Cloud.WebSocketProvider(["wss://clouddata.turbowarp.org","wss://clouddata.turbowarp.xyz"], "stick-manx-battle-chess"));
