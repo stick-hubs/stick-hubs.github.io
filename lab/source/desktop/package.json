@@ -1,0 +1,80 @@
+{
+  "name": "stick-lab",
+  "productName": "Stick Lab",
+  "version": "1.0.0",
+  "description": "Stick Lab - make games with blocks. By Stick Hubs, based on TurboWarp.",
+  "author": "Stick Hubs",
+  "license": "GPL-3.0",
+  "homepage": "https://stick-hubs.github.io/stick-lab.html",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "build": {
+    "appId": "io.github.stick-hubs.sticklab",
+    "productName": "Stick Lab",
+    "copyright": "Stick Hubs. Based on TurboWarp (GPL-3.0).",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**",
+      "gui/**",
+      "package.json",
+      "LICENSE"
+    ],
+    "asar": true,
+    "fileAssociations": [
+      {
+        "ext": "sl",
+        "name": "Stick Lab Project",
+        "description": "Stick Lab Project",
+        "mimeType": "application/x-stick-lab",
+        "role": "Editor",
+        "icon": "icon"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.education",
+      "icon": "build/icon.png",
+      "artifactName": "Stick_Lab-mac-${arch}.zip",
+      "identity": null
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "artifactName": "stick_lab.exe",
+      "shortcutName": "Stick Lab",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
+    }
+  },
+  "devDependencies": {
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0"
+  },
+  "repository": "https://github.com/stick-hubs/stick-hubs.github.io"
+}

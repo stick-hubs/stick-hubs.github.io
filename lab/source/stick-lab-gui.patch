@@ -1,0 +1,671 @@
+diff --git a/src/components/action-menu/icon--sprite.svg b/src/components/action-menu/icon--sprite.svg
+index 12c4a8b..b743363 100644
+Binary files a/src/components/action-menu/icon--sprite.svg and b/src/components/action-menu/icon--sprite.svg differ
+diff --git a/src/components/menu-bar/menu-bar.css b/src/components/menu-bar/menu-bar.css
+index 444e77c..f53f367 100644
+--- a/src/components/menu-bar/menu-bar.css
++++ b/src/components/menu-bar/menu-bar.css
+@@ -233,3 +233,26 @@
+     color: inherit;
+     text-decoration: none;
+ }
++
++/* Stick Lab brand in the menu bar */
++.stick-lab-brand {
++    display: flex;
++    align-items: center;
++    gap: 0.4rem;
++    padding: 0 0.6rem 0 0.25rem;
++    margin-right: 0.25rem;
++    color: inherit;
++    text-decoration: none;
++    border-right: 1px solid rgba(255, 255, 255, 0.35);
++}
++.stick-lab-logo {
++    height: 1.9rem;
++    width: auto;
++}
++.stick-lab-name {
++    font-family: "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
++    font-weight: bold;
++    font-size: 1.05rem;
++    letter-spacing: 0.02em;
++    white-space: nowrap;
++}
+diff --git a/src/components/menu-bar/menu-bar.jsx b/src/components/menu-bar/menu-bar.jsx
+index 6caddb5..ba871b2 100644
+--- a/src/components/menu-bar/menu-bar.jsx
++++ b/src/components/menu-bar/menu-bar.jsx
+@@ -96,6 +96,7 @@ import editIcon from './icon--edit.svg';
+ import addonsIcon from './addons.svg';
+ import errorIcon from './tw-error.svg';
+ import advancedIcon from './tw-advanced.svg';
++import stickLabLogo from './sl-logo.svg';
+ 
+ import ninetiesLogo from './nineties_logo.svg';
+ import catLogo from './cat_logo.svg';
+@@ -492,6 +493,21 @@ class MenuBar extends React.Component {
+             >
+                 <div className={styles.mainMenu}>
+                     <div className={styles.fileGroup}>
++                        <a
++                            className={classNames(styles.menuBarItem, styles.stickLabBrand)}
++                            href="https://stick-hubs.github.io/stick-lab.html"
++                            rel="noopener noreferrer"
++                            target="_blank"
++                            title="Stick Lab by Stick Hubs"
++                        >
++                            <img
++                                alt=""
++                                className={styles.stickLabLogo}
++                                draggable={false}
++                                src={stickLabLogo}
++                            />
++                            <span className={styles.stickLabName}>{'Stick Lab'}</span>
++                        </a>
+                         {this.props.errors.length > 0 && <div>
+                             <MenuLabel
+                                 open={this.props.errorsMenuOpen}
+@@ -1015,7 +1031,7 @@ class MenuBar extends React.Component {
+                     <div className={styles.menuBarItem}>
+                         <a
+                             className={styles.feedbackLink}
+-                            href="https://scratch.mit.edu/users/GarboMuffin/#comments"
++                            href="https://stick-hubs.github.io/forum.html"
+                             rel="noopener noreferrer"
+                             target="_blank"
+                         >
+diff --git a/src/components/menu-bar/sl-logo.svg b/src/components/menu-bar/sl-logo.svg
+new file mode 100644
+index 0000000..08b91b6
+Binary files /dev/null and b/src/components/menu-bar/sl-logo.svg differ
+diff --git a/src/components/menu-bar/tw-theme-accent.jsx b/src/components/menu-bar/tw-theme-accent.jsx
+index 4ebb5b4..7d881aa 100644
+--- a/src/components/menu-bar/tw-theme-accent.jsx
++++ b/src/components/menu-bar/tw-theme-accent.jsx
+@@ -7,7 +7,7 @@ import {connect} from 'react-redux';
+ import check from './check.svg';
+ import dropdownCaret from './dropdown-caret.svg';
+ import {MenuItem, Submenu} from '../menu/menu.jsx';
+-import {ACCENT_BLUE, ACCENT_MAP, ACCENT_PURPLE, ACCENT_RED, ACCENT_RAINBOW, Theme} from '../../lib/themes/index.js';
++import {ACCENT_BLUE, ACCENT_MAP, ACCENT_PURPLE, ACCENT_RED, ACCENT_RAINBOW, ACCENT_CLASSIC, Theme} from '../../lib/themes/index.js';
+ import {openAccentMenu, accentMenuOpen, closeSettingsMenu} from '../../reducers/menus.js';
+ import {setTheme} from '../../reducers/theme.js';
+ import {persistTheme} from '../../lib/themes/themePersistance.js';
+@@ -15,6 +15,11 @@ import rainbowIcon from './tw-accent-rainbow.svg';
+ import styles from './settings-menu.css';
+ 
+ const options = defineMessages({
++    [ACCENT_CLASSIC]: {
++        defaultMessage: 'Stick Lab Classic',
++        description: 'Name of the Stick Lab classic blue accent color',
++        id: 'sl.accent.classic'
++    },
+     [ACCENT_RED]: {
+         defaultMessage: 'Red',
+         description: 'Name of the red color scheme, used by TurboWarp by default.',
+diff --git a/src/containers/sb3-downloader.jsx b/src/containers/sb3-downloader.jsx
+index 3f4773c..882a839 100644
+--- a/src/containers/sb3-downloader.jsx
++++ b/src/containers/sb3-downloader.jsx
+@@ -10,13 +10,14 @@ import {setFileHandle} from '../reducers/tw';
+ import {getIsShowingProject} from '../reducers/project-state';
+ import log from '../lib/log';
+ import {getShowSaveFilePicker} from '../lib/tw-file-system-access';
++import {sb3BlobToStickLabBlob, SL_EXTENSION} from '../lib/sl-format';
+ 
+ // from sb-file-uploader-hoc.jsx
+ const getProjectTitleFromFilename = fileInputFilename => {
+     if (!fileInputFilename) return '';
+     // only parse title with valid scratch project extensions
+     // (.sb, .sb2, and .sb3)
+-    const matches = fileInputFilename.match(/^(.*)\.sb[23]?$/);
++    const matches = fileInputFilename.match(/^(.*)\.(sb[23]?|sl)$/i);
+     if (!matches) return '';
+     return matches[1].substring(0, 100); // truncate project title to max 100 chars
+ };
+@@ -87,10 +88,12 @@ class SB3Downloader extends React.Component {
+             return;
+         }
+         this.startedSaving();
+-        this.props.saveProjectSb3().then(content => {
+-            this.finishedSaving();
+-            downloadBlob(this.props.projectFilename, content);
+-        });
++        this.props.saveProjectSb3()
++            .then(sb3BlobToStickLabBlob)
++            .then(content => {
++                this.finishedSaving();
++                downloadBlob(this.props.projectFilename, content);
++            });
+     }
+     async saveAsNew () {
+         if (!this.props.canSaveProject) {
+@@ -101,9 +104,9 @@ class SB3Downloader extends React.Component {
+                 suggestedName: this.props.projectFilename,
+                 types: [
+                     {
+-                        description: 'Scratch 3 Project',
++                        description: 'Stick Lab Project',
+                         accept: {
+-                            'application/octet-stream': '.sb3'
++                            'application/octet-stream': SL_EXTENSION
+                         }
+                     }
+                 ],
+@@ -136,106 +139,22 @@ class SB3Downloader extends React.Component {
+         if (!this.props.canSaveProject) {
+             return;
+         }
+-
+         const writable = await handle.createWritable();
+         this.startedSaving();
+-
+-        await new Promise((resolve, reject) => {
+-            // Projects can be very large, so we'll utilize JSZip's stream API to avoid having the
+-            // entire sb3 in memory at the same time.
+-            const jszipStream = this.props.saveProjectSb3Stream();
+-
+-            const abortController = new AbortController();
+-            jszipStream.on('error', error => {
+-                abortController.abort(error);
+-            });
+-
+-            // JSZip's stream pause() and resume() methods are not necessarily completely no-ops
+-            // if they are already paused or resumed. These also make it easier to add debug
+-            // logging of when we actually pause or resume.
+-            // Note that JSZip will keep sending some data after you ask it to pause.
+-            let jszipStreamRunning = false;
+-            const pauseJSZipStream = () => {
+-                if (jszipStreamRunning) {
+-                    jszipStreamRunning = false;
+-                    jszipStream.pause();
+-                }
+-            };
+-            const resumeJSZipStream = () => {
+-                if (!jszipStreamRunning) {
+-                    jszipStreamRunning = true;
+-                    jszipStream.resume();
+-                }
+-            };
+-
+-            // Allow the JSZip stream to run quite a bit ahead of file writing. This helps
+-            // reduce zip stream pauses on systems with high latency storage.
+-            const HIGH_WATER_MARK_BYTES = 1024 * 1024 * 5;
+-
+-            // Minimum size of buffer to pass into write(). Small buffers will be queued and
+-            // written in batches as they reach or exceed this size.
+-            const WRITE_BUFFER_TARGET_SIZE_BYTES = 1024 * 1024;
+-
+-            const zipStream = new ReadableStream({
+-                start: controller => {
+-                    jszipStream.on('data', data => {
+-                        controller.enqueue(data);
+-                        if (controller.desiredSize <= 0) {
+-                            pauseJSZipStream();
+-                        }
+-                    });
+-                    jszipStream.on('end', () => {
+-                        controller.close();
+-                    });
+-                    resumeJSZipStream();
+-                },
+-                pull: () => {
+-                    resumeJSZipStream();
+-                },
+-                cancel: () => {
+-                    pauseJSZipStream();
+-                }
+-            }, new ByteLengthQueuingStrategy({
+-                highWaterMark: HIGH_WATER_MARK_BYTES
+-            }));
+-
+-            const queuedChunks = [];
+-            const fileStream = new WritableStream({
+-                write: chunk => {
+-                    queuedChunks.push(chunk);
+-                    const currentSize = getLengthOfByteArrays(queuedChunks);
+-                    if (currentSize >= WRITE_BUFFER_TARGET_SIZE_BYTES) {
+-                        const newBuffer = concatenateByteArrays(queuedChunks);
+-                        queuedChunks.length = 0;
+-                        return writable.write(newBuffer);
+-                    }
+-                    // Otherwise wait for more data
+-                },
+-                close: async () => {
+-                    // Write the last batch of data.
+-                    const lastBuffer = concatenateByteArrays(queuedChunks);
+-                    if (lastBuffer.byteLength) {
+-                        await writable.write(lastBuffer);
+-                    }
+-                    // File handle must be closed at the end to actually save the file.
+-                    await writable.close();
+-                },
+-                abort: async () => {
+-                    await writable.abort();
+-                }
+-            });
+-
+-            zipStream.pipeTo(fileStream, {
+-                signal: abortController.signal
+-            })
+-                .then(() => {
+-                    this.finishedSaving();
+-                    resolve();
+-                })
+-                .catch(error => {
+-                    reject(error);
+-                });
+-        });
++        try {
++            const sb3 = await this.props.saveProjectSb3();
++            const sl = await sb3BlobToStickLabBlob(sb3);
++            await writable.write(sl);
++            await writable.close();
++        } catch (e) {
++            try {
++                await writable.abort();
++            } catch (e2) {
++                // ignore
++            }
++            throw e;
++        }
++        this.finishedSaving();
+     }
+     handleSaveError (e) {
+         // AbortError can happen when someone cancels the file selector dialog
+@@ -272,7 +191,7 @@ const getProjectFilename = (curTitle, defaultTitle) => {
+     if (!filenameTitle || filenameTitle.length === 0) {
+         filenameTitle = defaultTitle;
+     }
+-    return `${filenameTitle.substring(0, 100)}.sb3`;
++    return `${filenameTitle.substring(0, 100)}${SL_EXTENSION}`;
+ };
+ 
+ SB3Downloader.propTypes = {
+diff --git a/src/containers/tw-restore-point-manager.jsx b/src/containers/tw-restore-point-manager.jsx
+index 39745bc..d8dfd1a 100644
+--- a/src/containers/tw-restore-point-manager.jsx
++++ b/src/containers/tw-restore-point-manager.jsx
+@@ -11,6 +11,7 @@ import TWRestorePointModal from '../components/tw-restore-point-modal/restore-po
+ import RestorePointAPI from '../lib/tw-restore-point-api';
+ import log from '../lib/log';
+ import downloadBlob from '../lib/download-blob.js';
++import {sb3BlobToStickLabBlob} from '../lib/sl-format';
+ 
+ /* eslint-disable no-alert */
+ 
+@@ -173,8 +174,8 @@ class TWRestorePointManager extends React.Component {
+         };
+ 
+         RestorePointAPI.exportRestorePoint(id)
+-            .then(result => {
+-                downloadBlob(`${result.title}.sb3`, result.blob);
++            .then(async result => {
++                downloadBlob(`${result.title}.sl`, await sb3BlobToStickLabBlob(result.blob));
+                 removeFromExportingList();
+             })
+             .catch(error => {
+diff --git a/src/lib/brand.js b/src/lib/brand.js
+index 8aba8e1..0118c74 100644
+--- a/src/lib/brand.js
++++ b/src/lib/brand.js
+@@ -1,5 +1,5 @@
+ // Legacy export format because this is used by some build-time scripts stuck in the past.
+ // eslint-disable-next-line import/no-commonjs
+ module.exports = {
+-    APP_NAME: 'TurboWarp'
++    APP_NAME: 'Stick Lab'
+ };
+diff --git a/src/lib/default-project/index.js b/src/lib/default-project/index.js
+index d5b74d7..2d4f201 100644
+--- a/src/lib/default-project/index.js
++++ b/src/lib/default-project/index.js
+@@ -3,7 +3,7 @@ import projectData from './project-data';
+ /* eslint-disable import/no-unresolved */
+ import overrideDefaultProject from '!arraybuffer-loader!./override-default-project.sb3';
+ import backdrop from '!raw-loader!./cd21514d0531fdffb22204e0ec5ed84a.svg';
+-import costume1 from '!raw-loader!./dango-cat.svg';
++import costume1 from '!raw-loader!./stickman.svg';
+ /* eslint-enable import/no-unresolved */
+ import {TextEncoder} from '../tw-text-encoder';
+ 
+@@ -37,7 +37,7 @@ const defaultProject = translator => {
+         dataFormat: 'SVG',
+         data: encoder.encode(backdrop)
+     }, {
+-        id: '927d672925e7b99f7813735c484c6922',
++        id: 'eb5c79abbc3132f635ff4607fb48b756',
+         assetType: 'ImageVector',
+         dataFormat: 'SVG',
+         data: encoder.encode(costume1)
+diff --git a/src/lib/default-project/project-data.js b/src/lib/default-project/project-data.js
+index 12dc593..2d8563d 100644
+--- a/src/lib/default-project/project-data.js
++++ b/src/lib/default-project/project-data.js
+@@ -60,13 +60,13 @@ const projectData = translateFunction => {
+                 currentCostume: 0,
+                 costumes: [
+                     {
+-                        assetId: '927d672925e7b99f7813735c484c6922',
++                        assetId: 'eb5c79abbc3132f635ff4607fb48b756',
+                         name: translator(messages.costume, {index: 1}),
+                         bitmapResolution: 1,
+-                        md5ext: '927d672925e7b99f7813735c484c6922.svg',
++                        md5ext: 'eb5c79abbc3132f635ff4607fb48b756.svg',
+                         dataFormat: 'svg',
+-                        rotationCenterX: 30.74937882782359,
+-                        rotationCenterY: 58.864768144346826
++                        rotationCenterX: 40,
++                        rotationCenterY: 56
+                     }
+                 ],
+                 sounds: [],
+diff --git a/src/lib/default-project/stickman.svg b/src/lib/default-project/stickman.svg
+new file mode 100644
+index 0000000..fa22f48
+Binary files /dev/null and b/src/lib/default-project/stickman.svg differ
+diff --git a/src/lib/sb-file-uploader-hoc.jsx b/src/lib/sb-file-uploader-hoc.jsx
+index 01f29db..a866883 100644
+--- a/src/lib/sb-file-uploader-hoc.jsx
++++ b/src/lib/sb-file-uploader-hoc.jsx
+@@ -81,7 +81,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
+                             multiple: false,
+                             types: [
+                                 {
+-                                    description: 'Scratch Project',
++                                    description: 'Stick Lab or Scratch Project',
+                                     accept: {
+                                         // Chrome on Android tracks the MIME type of files that get downloaded and
+                                         // then actually enforces that the type must match in showOpenFilePicker()
+@@ -90,7 +90,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
+                                         // what MIME type they are saved with, so we have to use the most broad MIME
+                                         // type here. Otherwise some users just won't be able to load files for no
+                                         // fault of their own.
+-                                        '*/*': ['.sb', '.sb2', '.sb3']
++                                        '*/*': ['.sl', '.sb', '.sb2', '.sb3']
+                                     }
+                                 }
+                             ]
+@@ -113,7 +113,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
+             } else {
+                 // create <input> element and add it to DOM
+                 this.inputElement = document.createElement('input');
+-                this.inputElement.accept = '.sb,.sb2,.sb3';
++                this.inputElement.accept = '.sl,.sb,.sb2,.sb3';
+                 this.inputElement.style = 'display: none;';
+                 this.inputElement.type = 'file';
+                 this.inputElement.onchange = this.handleChange; // connects to step 3
+@@ -150,7 +150,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
+                     // Don't update file handle until after confirming replace.
+                     const handle = thisFileInput.handle;
+                     if (handle) {
+-                        if (this.fileToUpload.name.endsWith('.sb3')) {
++                        if (/\.sl$/i.test(this.fileToUpload.name)) {
+                             this.props.onSetFileHandle(handle);
+                         } else {
+                             this.props.onSetFileHandle(null);
+@@ -187,7 +187,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
+             if (!fileInputFilename) return '';
+             // only parse title with valid scratch project extensions
+             // (.sb, .sb2, and .sb3)
+-            const matches = fileInputFilename.match(/^(.*)\.sb[23]?$/);
++            const matches = fileInputFilename.match(/^(.*)\.(sb[23]?|sl)$/i);
+             if (!matches) return '';
+             return matches[1].substring(0, 100); // truncate project title to max 100 chars
+         }
+diff --git a/src/lib/sl-format.js b/src/lib/sl-format.js
+new file mode 100644
+index 0000000..e6b14ca
+--- /dev/null
++++ b/src/lib/sl-format.js
+@@ -0,0 +1,113 @@
++// Stick Lab project format (.sl)
++//
++// A .sl file is a Scratch 3 project that has been scrambled so that only Stick Lab can open it:
++//   bytes 0-7  "STICKLAB" (magic)
++//   byte  8    format version (1)
++//   bytes 9..  the .sb3 zip, every byte XORed with KEY
++// Renaming a .sl file to .sb3 does not make it open in Scratch, because the zip data is scrambled.
++
++const MAGIC = [0x53, 0x54, 0x49, 0x43, 0x4b, 0x4c, 0x41, 0x42]; // "STICKLAB"
++const VERSION = 1;
++const HEADER_LENGTH = MAGIC.length + 1;
++const KEY = new Uint8Array([
++    0x5a, 0x17, 0xc3, 0x2e, 0x91, 0x4b, 0xe8, 0x06, 0x7d, 0xb2, 0x39, 0xf4, 0x60, 0x0d, 0xa5, 0x8c
++]);
++
++const SL_EXTENSION = '.sl';
++const SL_MIME = 'application/x-stick-lab';
++
++const toUint8Array = data => {
++    if (data instanceof Uint8Array) return data;
++    if (data instanceof ArrayBuffer) return new Uint8Array(data);
++    if (ArrayBuffer.isView(data)) return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
++    return null;
++};
++
++const scramble = (input, output) => {
++    const keyLength = KEY.length;
++    for (let i = 0; i < input.length; i++) {
++        output[i] = input[i] ^ KEY[i % keyLength];
++    }
++};
++
++/**
++ * @param {ArrayBuffer|ArrayBufferView} data Any project data
++ * @returns {boolean} true if the data is a Stick Lab .sl file
++ */
++const isStickLabProject = data => {
++    const bytes = toUint8Array(data);
++    if (!bytes || bytes.length < HEADER_LENGTH) return false;
++    for (let i = 0; i < MAGIC.length; i++) {
++        if (bytes[i] !== MAGIC[i]) return false;
++    }
++    return true;
++};
++
++/**
++ * @param {ArrayBuffer|ArrayBufferView} data Contents of a .sl file
++ * @returns {ArrayBuffer} The .sb3 zip inside it
++ */
++const decodeStickLabProject = data => {
++    const bytes = toUint8Array(data);
++    const version = bytes[MAGIC.length];
++    if (version !== VERSION) {
++        throw new Error(`This .sl file was made by a newer version of Stick Lab (format ${version}). Please update Stick Lab.`);
++    }
++    const body = bytes.subarray(HEADER_LENGTH);
++    const out = new Uint8Array(body.length);
++    scramble(body, out);
++    return out.buffer;
++};
++
++/**
++ * @param {ArrayBuffer|ArrayBufferView} sb3 A .sb3 zip
++ * @returns {Uint8Array} Contents of a .sl file
++ */
++const encodeStickLabProject = sb3 => {
++    const bytes = toUint8Array(sb3);
++    const out = new Uint8Array(HEADER_LENGTH + bytes.length);
++    out.set(MAGIC, 0);
++    out[MAGIC.length] = VERSION;
++    scramble(bytes, out.subarray(HEADER_LENGTH));
++    return out;
++};
++
++/**
++ * @param {Blob} sb3Blob A .sb3 project as a Blob
++ * @returns {Promise<Blob>} The same project as a .sl Blob
++ */
++const sb3BlobToStickLabBlob = async sb3Blob => {
++    const buffer = await sb3Blob.arrayBuffer();
++    return new Blob([encodeStickLabProject(buffer)], {type: SL_MIME});
++};
++
++/**
++ * Make every VM accept .sl data in loadProject().
++ * @param {Function} VirtualMachine The scratch-vm class
++ */
++const installStickLabLoader = VirtualMachine => {
++    const proto = VirtualMachine.prototype;
++    if (proto.__stickLabPatched) return;
++    const originalLoadProject = proto.loadProject;
++    proto.loadProject = function (input) {
++        if (isStickLabProject(input)) {
++            try {
++                input = decodeStickLabProject(input);
++            } catch (e) {
++                return Promise.reject(e);
++            }
++        }
++        return originalLoadProject.call(this, input);
++    };
++    proto.__stickLabPatched = true;
++};
++
++export {
++    SL_EXTENSION,
++    SL_MIME,
++    isStickLabProject,
++    decodeStickLabProject,
++    encodeStickLabProject,
++    sb3BlobToStickLabBlob,
++    installStickLabLoader
++};
+diff --git a/src/lib/themes/accent/classic.js b/src/lib/themes/accent/classic.js
+new file mode 100644
+index 0000000..7f435c1
+--- /dev/null
++++ b/src/lib/themes/accent/classic.js
+@@ -0,0 +1,30 @@
++// Stick Lab "Classic" accent: the blue of the Stick Hubs website (classic.css).
++const guiColors = {
++    'motion-primary': '#2a6ab8',
++    'motion-primary-transparent': '#2a6ab8e6',
++    'motion-tertiary': '#1d4f91',
++
++    'looks-secondary': '#2a6ab8',
++    'looks-transparent': '#2a6ab859',
++    'looks-light-transparent': '#2a6ab826',
++    'looks-secondary-dark': '#1d4f91',
++
++    'extensions-primary': '#4f94dc',
++    'extensions-tertiary': '#1d5fa8',
++    'extensions-transparent': '#4f94dc59',
++    'extensions-light': '#d6e5f6',
++
++    'drop-highlight': '#8fbdf0',
++
++    'menu-bar-background-image': 'linear-gradient(180deg, #5a9de2 0%, #2a6ab8 55%, #1d5fa8 100%)'
++};
++
++const blockColors = {
++    checkboxActiveBackground: '#2a6ab8',
++    checkboxActiveBorder: '#1d4f91'
++};
++
++export {
++    guiColors,
++    blockColors
++};
+diff --git a/src/lib/themes/index.js b/src/lib/themes/index.js
+index d7b9f20..64ff40c 100644
+--- a/src/lib/themes/index.js
++++ b/src/lib/themes/index.js
+@@ -4,6 +4,7 @@ import * as accentPurple from './accent/purple';
+ import * as accentBlue from './accent/blue';
+ import * as accentRed from './accent/red';
+ import * as accentRainbow from './accent/rainbow';
++import * as accentClassic from './accent/classic';
+ 
+ import * as guiLight from './gui/light';
+ import * as guiDark from './gui/dark';
+@@ -16,13 +17,15 @@ const ACCENT_PURPLE = 'purple';
+ const ACCENT_BLUE = 'blue';
+ const ACCENT_RED = 'red';
+ const ACCENT_RAINBOW = 'rainbow';
++const ACCENT_CLASSIC = 'classic';
+ const ACCENT_MAP = {
++    [ACCENT_CLASSIC]: accentClassic,
+     [ACCENT_PURPLE]: accentPurple,
+     [ACCENT_BLUE]: accentBlue,
+     [ACCENT_RED]: accentRed,
+     [ACCENT_RAINBOW]: accentRainbow
+ };
+-const ACCENT_DEFAULT = ACCENT_RED;
++const ACCENT_DEFAULT = ACCENT_CLASSIC;
+ 
+ const GUI_LIGHT = 'light';
+ const GUI_DARK = 'dark';
+@@ -150,6 +153,7 @@ export {
+     ACCENT_PURPLE,
+     ACCENT_BLUE,
+     ACCENT_RAINBOW,
++    ACCENT_CLASSIC,
+     ACCENT_MAP,
+ 
+     GUI_LIGHT,
+diff --git a/src/playground/render-interface.jsx b/src/playground/render-interface.jsx
+index 8f417c7..2d5dcda 100644
+--- a/src/playground/render-interface.jsx
++++ b/src/playground/render-interface.jsx
+@@ -57,7 +57,7 @@ const handleClickAddonSettings = addonId => {
+ 
+ const messages = defineMessages({
+     defaultTitle: {
+-        defaultMessage: 'Run Scratch projects faster',
++        defaultMessage: 'Make games with blocks',
+         description: 'Title of homepage',
+         id: 'tw.guiDefaultTitle'
+     }
+diff --git a/src/reducers/vm.js b/src/reducers/vm.js
+index 2951caf..11d78a2 100644
+--- a/src/reducers/vm.js
++++ b/src/reducers/vm.js
+@@ -1,4 +1,6 @@
+ import VM from 'scratch-vm';
++import {installStickLabLoader} from '../lib/sl-format';
++installStickLabLoader(VM);
+ import storage from '../lib/storage';
+ import {MAXIMUM_CLOUD_VARIABLES} from '../lib/tw-cloud-limits';
+ 
+diff --git a/webpack.config.js b/webpack.config.js
+index f9df336..9324893 100644
+--- a/webpack.config.js
++++ b/webpack.config.js
+@@ -190,7 +190,7 @@ module.exports = [
+                 chunks: ['editor'],
+                 template: 'src/playground/index.ejs',
+                 filename: 'editor.html',
+-                title: `${APP_NAME} - Run Scratch projects faster`,
++                title: `${APP_NAME} - Make games with blocks`,
+                 isEditor: true,
+                 ...htmlWebpackPluginCommon
+             }),
+@@ -198,14 +198,14 @@ module.exports = [
+                 chunks: ['player'],
+                 template: 'src/playground/index.ejs',
+                 filename: 'index.html',
+-                title: `${APP_NAME} - Run Scratch projects faster`,
++                title: `${APP_NAME} - Make games with blocks`,
+                 ...htmlWebpackPluginCommon
+             }),
+             new HtmlWebpackPlugin({
+                 chunks: ['fullscreen'],
+                 template: 'src/playground/index.ejs',
+                 filename: 'fullscreen.html',
+-                title: `${APP_NAME} - Run Scratch projects faster`,
++                title: `${APP_NAME} - Make games with blocks`,
+                 ...htmlWebpackPluginCommon
+             }),
+             new HtmlWebpackPlugin({
+@@ -249,7 +249,7 @@ module.exports = [
+         ])
+     })
+ ].concat(
+-    process.env.NODE_ENV === 'production' || process.env.BUILD_MODE === 'dist' ? (
++    process.env.BUILD_MODE === 'dist' ? (
+         // export as library
+         defaultsDeep({}, base, {
+             target: 'web',
