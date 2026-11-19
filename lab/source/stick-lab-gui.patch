@@ -122,10 +122,10 @@ index 30f8336..51d12d9 100644
                                      <Box className={styles.watermark}>
                                          <Watermark />
 diff --git a/src/components/menu-bar/menu-bar.css b/src/components/menu-bar/menu-bar.css
-index 444e77c..f53f367 100644
+index 444e77c..85d4bda 100644
 --- a/src/components/menu-bar/menu-bar.css
 +++ b/src/components/menu-bar/menu-bar.css
-@@ -233,3 +233,26 @@
+@@ -233,3 +233,32 @@
      color: inherit;
      text-decoration: none;
  }
@@ -152,8 +152,14 @@ index 444e77c..f53f367 100644
 +    letter-spacing: 0.02em;
 +    white-space: nowrap;
 +}
++
++.stick-lab-version {
++    font-weight: normal;
++    font-size: 0.75rem;
++    opacity: 0.85;
++}
 diff --git a/src/components/menu-bar/menu-bar.jsx b/src/components/menu-bar/menu-bar.jsx
-index 6caddb5..ba871b2 100644
+index 6caddb5..edc4f31 100644
 --- a/src/components/menu-bar/menu-bar.jsx
 +++ b/src/components/menu-bar/menu-bar.jsx
 @@ -96,6 +96,7 @@ import editIcon from './icon--edit.svg';
@@ -181,7 +187,7 @@ index 6caddb5..ba871b2 100644
 +                                draggable={false}
 +                                src={stickLabLogo}
 +                            />
-+                            <span className={styles.stickLabName}>{'Stick Lab'}</span>
++                            <span className={styles.stickLabName}>{'Stick Lab'}<span className={styles.stickLabVersion}>{' 1.1'}</span></span>
 +                        </a>
                          {this.props.errors.length > 0 && <div>
                              <MenuLabel
@@ -224,6 +230,1452 @@ index 4ebb5b4..7d881aa 100644
      [ACCENT_RED]: {
          defaultMessage: 'Red',
          description: 'Name of the red color scheme, used by TurboWarp by default.',
+diff --git a/src/components/sl-animate/animate-editor.jsx b/src/components/sl-animate/animate-editor.jsx
+new file mode 100644
+index 0000000..bcaea94
+--- /dev/null
++++ b/src/components/sl-animate/animate-editor.jsx
+@@ -0,0 +1,994 @@
++// Stick Lab Animate: a Flash-style frame-by-frame animation editor for a sprite's costumes.
++import React from 'react';
++import PropTypes from 'prop-types';
++import classNames from 'classnames';
++import styles from './animate.css';
++
++const W = 960; // frames are drawn at 2x stage size
++const H = 720;
++const CX = W / 2;
++const CY = H / 2;
++const MAX_FRAMES = 150;
++const MAX_UNDO = 25;
++const THUMB_W = 96;
++const THUMB_H = 72;
++
++const SWATCHES = [
++    '#121212', '#ffffff', '#9a9a9a', '#e53935', '#fb8c00', '#fdd835',
++    '#43a047', '#1e88e5', '#3949ab', '#8e24aa', '#6d4c41', '#f48fb1'
++];
++
++const TOOLS = [
++    {id: 'pencil', label: 'Brush', key: 'b', icon: 'M4 20 L7 19 L19 7 L17 5 L5 17 Z M15 7 L17 9'},
++    {id: 'eraser', label: 'Eraser', key: 'e', icon: 'M8 20 H20 M4 16 L14 6 L19 11 L11 19 H8 Z'},
++    {id: 'line', label: 'Line', key: 'l', icon: 'M4 20 L20 4'},
++    {id: 'rect', label: 'Rectangle', key: 'r', icon: 'M4 6 H20 V18 H4 Z'},
++    {id: 'ellipse', label: 'Ellipse', key: 'o', icon: 'M12 5 C 20 5, 20 19, 12 19 C 4 19, 4 5, 12 5 Z'},
++    {id: 'fill', label: 'Fill', key: 'f', icon: 'M5 12 L12 5 L19 12 L12 19 Z M19 14 C 21 17, 17 17, 19 14'},
++    {id: 'move', label: 'Move frame', key: 'm', icon: 'M12 3 V21 M3 12 H21 M12 3 L9 6 M12 3 L15 6 M12 21 L9 18 M12 21 L15 18'},
++    {id: 'picker', label: 'Pick colour', key: 'i', icon: 'M5 19 L13 11 M11 9 L15 13 M14 6 L18 10 L20 8 L16 4 Z'}
++];
++
++let nextKey = 1;
++
++const makeCanvas = (w = W, h = H) => {
++    const c = document.createElement('canvas');
++    c.width = w;
++    c.height = h;
++    return c;
++};
++
++const hexToRgb = hex => {
++    const n = parseInt(hex.slice(1), 16);
++    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
++};
++
++const rgbToHex = (r, g, b) => `#${[r, g, b].map(v => v.toString(16).padStart(2, '0')).join('')}`;
++
++const floodFill = (ctx, x, y, hex) => {
++    const img = ctx.getImageData(0, 0, W, H);
++    const d = img.data;
++    const [fr, fg, fb] = hexToRgb(hex);
++    const start = ((y * W) + x) * 4;
++    const sr = d[start];
++    const sg = d[start + 1];
++    const sb = d[start + 2];
++    const sa = d[start + 3];
++    if (sr === fr && sg === fg && sb === fb && sa === 255) return false;
++    const tol = 48;
++    const match = i => (
++        Math.abs(d[i] - sr) <= tol && Math.abs(d[i + 1] - sg) <= tol &&
++        Math.abs(d[i + 2] - sb) <= tol && Math.abs(d[i + 3] - sa) <= tol
++    );
++    const seen = new Uint8Array(W * H);
++    const stack = [x, y];
++    while (stack.length) {
++        const py = stack.pop();
++        let px = stack.pop();
++        let i = (py * W) + px;
++        while (px >= 0 && !seen[i] && match(i * 4)) {
++            px--;
++            i--;
++        }
++        px++;
++        i++;
++        let up = false;
++        let down = false;
++        while (px < W && !seen[i] && match(i * 4)) {
++            const o = i * 4;
++            d[o] = fr;
++            d[o + 1] = fg;
++            d[o + 2] = fb;
++            d[o + 3] = 255;
++            seen[i] = 1;
++            if (py > 0) {
++                const a = i - W;
++                if (!seen[a] && match(a * 4)) {
++                    if (!up) {
++                        stack.push(px, py - 1);
++                        up = true;
++                    }
++                } else {
++                    up = false;
++                }
++            }
++            if (py < H - 1) {
++                const b = i + W;
++                if (!seen[b] && match(b * 4)) {
++                    if (!down) {
++                        stack.push(px, py + 1);
++                        down = true;
++                    }
++                } else {
++                    down = false;
++                }
++            }
++            px++;
++            i++;
++        }
++    }
++    ctx.putImageData(img, 0, 0);
++    return true;
++};
++
++class AnimateEditor extends React.Component {
++    constructor (props) {
++        super(props);
++        this.state = {
++            frames: [],
++            current: 0,
++            tool: 'pencil',
++            color: '#121212',
++            size: 8,
++            filled: false,
++            onion: true,
++            playing: false,
++            fps: 12,
++            loop: true,
++            addScript: true,
++            tweenCount: 4,
++            loading: true,
++            saving: false,
++            message: null
++        };
++        this.canvases = new Map(); // frame key -> canvas
++        this.undoStack = [];
++        this.redoStack = [];
++        this.viewRef = React.createRef();
++        this.drag = null;
++        this.handlePointerDown = this.handlePointerDown.bind(this);
++        this.handlePointerMove = this.handlePointerMove.bind(this);
++        this.handlePointerUp = this.handlePointerUp.bind(this);
++        this.handleKeyDown = this.handleKeyDown.bind(this);
++        this.handleSave = this.handleSave.bind(this);
++        this.handleClose = this.handleClose.bind(this);
++        this.togglePlay = this.togglePlay.bind(this);
++        this.insertKeyframe = this.insertKeyframe.bind(this);
++        this.insertBlank = this.insertBlank.bind(this);
++        this.deleteFrame = this.deleteFrame.bind(this);
++        this.undo = this.undo.bind(this);
++        this.tween = this.tween.bind(this);
++        this.redo = this.redo.bind(this);
++    }
++    componentDidMount () {
++        document.addEventListener('keydown', this.handleKeyDown);
++        this.loadFrames();
++    }
++    componentDidUpdate (prevProps, prevState) {
++        if (prevState.current !== this.state.current || prevState.onion !== this.state.onion ||
++            prevState.frames !== this.state.frames) {
++            this.renderView();
++        }
++    }
++    componentWillUnmount () {
++        document.removeEventListener('keydown', this.handleKeyDown);
++        this.stopPlaying();
++    }
++
++    // ------------------------------------------------------------------ loading
++
++    loadFrames () {
++        const target = this.props.vm.editingTarget;
++        if (!target) return;
++        const costumes = target.getCostumes();
++        const frames = costumes.map(costume => ({
++            key: nextKey++,
++            name: costume.name,
++            source: costume,
++            dirty: false,
++            thumb: null
++        }));
++        Promise.all(frames.map(frame => this.drawCostume(frame))).then(() => {
++            frames.forEach(f => {
++                f.thumb = this.makeThumb(f.key);
++            });
++            const current = Math.max(0, Math.min(target.currentCostume, frames.length - 1));
++            this.setState({frames: frames.slice(), current, loading: false}, () => this.renderView());
++        });
++    }
++
++    drawCostume (frame) {
++        const canvas = makeCanvas();
++        this.canvases.set(frame.key, canvas);
++        const costume = frame.source;
++        return new Promise(resolve => {
++            let uri;
++            try {
++                uri = costume.asset.encodeDataURI();
++            } catch (e) {
++                resolve();
++                return;
++            }
++            const img = new Image();
++            img.onload = () => {
++                const isVector = costume.dataFormat === 'svg';
++                const scale = isVector ? 2 : 2 / (costume.bitmapResolution || 1);
++                const ctx = canvas.getContext('2d');
++                ctx.drawImage(
++                    img,
++                    CX - (costume.rotationCenterX * scale),
++                    CY - (costume.rotationCenterY * scale),
++                    img.naturalWidth * scale,
++                    img.naturalHeight * scale
++                );
++                resolve();
++            };
++            img.onerror = () => resolve();
++            img.src = uri;
++        });
++    }
++
++    makeThumb (key) {
++        const thumb = makeCanvas(THUMB_W, THUMB_H);
++        const ctx = thumb.getContext('2d');
++        ctx.drawImage(this.canvases.get(key), 0, 0, THUMB_W, THUMB_H);
++        return thumb.toDataURL();
++    }
++
++    // ------------------------------------------------------------------ drawing the view
++
++    currentFrame () {
++        return this.state.frames[this.state.current];
++    }
++
++    renderView (preview) {
++        const view = this.viewRef.current;
++        if (!view) return;
++        const ctx = view.getContext('2d');
++        ctx.clearRect(0, 0, W, H);
++        const {frames, current, onion, playing} = this.state;
++        const frame = frames[current];
++        if (!frame) return;
++        if (onion && !playing) {
++            this.drawOnion(ctx, frames[current - 1], '#e53935', 0.32);
++            this.drawOnion(ctx, frames[current + 1], '#43a047', 0.22);
++        }
++        const src = this.canvases.get(frame.key);
++        if (preview && preview.move) {
++            ctx.drawImage(src, preview.dx, preview.dy);
++        } else {
++            ctx.drawImage(src, 0, 0);
++        }
++        if (preview && preview.shape) this.drawShape(ctx, preview.shape);
++        if (!playing) {
++            // stage centre marker, like the paint editor
++            ctx.strokeStyle = 'rgba(29, 79, 145, 0.35)';
++            ctx.lineWidth = 2;
++            ctx.beginPath();
++            ctx.moveTo(CX - 10, CY);
++            ctx.lineTo(CX + 10, CY);
++            ctx.moveTo(CX, CY - 10);
++            ctx.lineTo(CX, CY + 10);
++            ctx.stroke();
++        }
++    }
++
++    drawOnion (ctx, frame, tint, alpha) {
++        if (!frame) return;
++        if (!this.tintCanvas) this.tintCanvas = makeCanvas();
++        const t = this.tintCanvas.getContext('2d');
++        t.globalCompositeOperation = 'source-over';
++        t.clearRect(0, 0, W, H);
++        t.drawImage(this.canvases.get(frame.key), 0, 0);
++        t.globalCompositeOperation = 'source-atop';
++        t.fillStyle = tint;
++        t.globalAlpha = 0.55;
++        t.fillRect(0, 0, W, H);
++        t.globalAlpha = 1;
++        t.globalCompositeOperation = 'source-over';
++        ctx.globalAlpha = alpha;
++        ctx.drawImage(this.tintCanvas, 0, 0);
++        ctx.globalAlpha = 1;
++    }
++
++    drawShape (ctx, shape) {
++        const {tool, x0, y0, x1, y1, color, size, filled} = shape;
++        ctx.save();
++        ctx.lineCap = 'round';
++        ctx.lineJoin = 'round';
++        ctx.strokeStyle = color;
++        ctx.fillStyle = color;
++        ctx.lineWidth = size;
++        ctx.beginPath();
++        if (tool === 'line') {
++            ctx.moveTo(x0, y0);
++            ctx.lineTo(x1, y1);
++            ctx.stroke();
++        } else if (tool === 'rect') {
++            ctx.rect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
++            if (filled) ctx.fill();
++            else ctx.stroke();
++        } else if (tool === 'ellipse') {
++            const rx = Math.abs(x1 - x0) / 2;
++            const ry = Math.abs(y1 - y0) / 2;
++            ctx.ellipse((x0 + x1) / 2, (y0 + y1) / 2, Math.max(rx, 0.5), Math.max(ry, 0.5), 0, 0, Math.PI * 2);
++            if (filled) ctx.fill();
++            else ctx.stroke();
++        }
++        ctx.restore();
++    }
++
++    // ------------------------------------------------------------------ undo
++
++    pushUndo (key) {
++        const ctx = this.canvases.get(key).getContext('2d');
++        this.undoStack.push({key, data: ctx.getImageData(0, 0, W, H)});
++        if (this.undoStack.length > MAX_UNDO) this.undoStack.shift();
++        this.redoStack = [];
++    }
++
++    restore (from, to) {
++        const entry = from.pop();
++        if (!entry || !this.canvases.has(entry.key)) return;
++        const ctx = this.canvases.get(entry.key).getContext('2d');
++        to.push({key: entry.key, data: ctx.getImageData(0, 0, W, H)});
++        ctx.putImageData(entry.data, 0, 0);
++        const index = this.state.frames.findIndex(f => f.key === entry.key);
++        this.markDirty(entry.key, index >= 0 ? index : this.state.current);
++    }
++
++    undo () {
++        this.restore(this.undoStack, this.redoStack);
++    }
++
++    redo () {
++        this.restore(this.redoStack, this.undoStack);
++    }
++
++    markDirty (key, goTo) {
++        const frames = this.state.frames.map(f => (f.key === key ? {...f, dirty: true, thumb: this.makeThumb(key)} : f));
++        this.setState({frames, current: typeof goTo === 'number' ? goTo : this.state.current});
++    }
++
++    // ------------------------------------------------------------------ pointer tools
++
++    toCanvas (e) {
++        const rect = this.viewRef.current.getBoundingClientRect();
++        return {
++            x: Math.round((e.clientX - rect.left) * (W / rect.width)),
++            y: Math.round((e.clientY - rect.top) * (H / rect.height))
++        };
++    }
++
++    handlePointerDown (e) {
++        if (this.state.playing || this.state.loading || e.button !== 0) return;
++        const frame = this.currentFrame();
++        if (!frame) return;
++        e.currentTarget.setPointerCapture(e.pointerId);
++        const p = this.toCanvas(e);
++        const {tool, color, size} = this.state;
++        const ctx = this.canvases.get(frame.key).getContext('2d');
++        if (tool === 'picker') {
++            const d = ctx.getImageData(Math.min(W - 1, Math.max(0, p.x)), Math.min(H - 1, Math.max(0, p.y)), 1, 1).data;
++            if (d[3] > 0) this.setState({color: rgbToHex(d[0], d[1], d[2]), tool: 'pencil'});
++            return;
++        }
++        if (tool === 'fill') {
++            if (p.x < 0 || p.y < 0 || p.x >= W || p.y >= H) return;
++            this.pushUndo(frame.key);
++            if (floodFill(ctx, p.x, p.y, color)) this.markDirty(frame.key);
++            else this.undoStack.pop();
++            return;
++        }
++        this.pushUndo(frame.key);
++        this.drag = {tool, x0: p.x, y0: p.y, x1: p.x, y1: p.y, last: p, key: frame.key};
++        if (tool === 'pencil' || tool === 'eraser') {
++            ctx.save();
++            ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
++            ctx.fillStyle = color;
++            ctx.beginPath();
++            ctx.arc(p.x, p.y, (tool === 'eraser' ? size * 2 : size) / 2, 0, Math.PI * 2);
++            ctx.fill();
++            ctx.restore();
++            this.renderView();
++        }
++    }
++
++    handlePointerMove (e) {
++        if (!this.drag) return;
++        const p = this.toCanvas(e);
++        const d = this.drag;
++        const {color, size, filled} = this.state;
++        d.x1 = p.x;
++        d.y1 = p.y;
++        if (d.tool === 'pencil' || d.tool === 'eraser') {
++            const ctx = this.canvases.get(d.key).getContext('2d');
++            ctx.save();
++            ctx.globalCompositeOperation = d.tool === 'eraser' ? 'destination-out' : 'source-over';
++            ctx.strokeStyle = color;
++            ctx.lineWidth = d.tool === 'eraser' ? size * 2 : size;
++            ctx.lineCap = 'round';
++            ctx.lineJoin = 'round';
++            ctx.beginPath();
++            ctx.moveTo(d.last.x, d.last.y);
++            ctx.lineTo(p.x, p.y);
++            ctx.stroke();
++            ctx.restore();
++            d.last = p;
++            this.renderView();
++        } else if (d.tool === 'move') {
++            this.renderView({move: true, dx: p.x - d.x0, dy: p.y - d.y0});
++        } else {
++            this.renderView({shape: {tool: d.tool, x0: d.x0, y0: d.y0, x1: p.x, y1: p.y, color, size, filled}});
++        }
++    }
++
++    handlePointerUp () {
++        const d = this.drag;
++        if (!d) return;
++        this.drag = null;
++        const canvas = this.canvases.get(d.key);
++        const ctx = canvas.getContext('2d');
++        const {color, size, filled} = this.state;
++        if (d.tool === 'move') {
++            const copy = makeCanvas();
++            copy.getContext('2d').drawImage(canvas, 0, 0);
++            ctx.clearRect(0, 0, W, H);
++            ctx.drawImage(copy, d.x1 - d.x0, d.y1 - d.y0);
++        } else if (d.tool === 'line' || d.tool === 'rect' || d.tool === 'ellipse') {
++            this.drawShape(ctx, {tool: d.tool, x0: d.x0, y0: d.y0, x1: d.x1, y1: d.y1, color, size, filled});
++        }
++        this.markDirty(d.key);
++        this.renderView();
++    }
++
++    // ------------------------------------------------------------------ frames
++
++    addFrame (fromKey) {
++        const {frames, current} = this.state;
++        if (frames.length >= MAX_FRAMES) {
++            this.setState({message: `An animation can have up to ${MAX_FRAMES} frames.`});
++            return;
++        }
++        const key = nextKey++;
++        const canvas = makeCanvas();
++        if (fromKey) canvas.getContext('2d').drawImage(this.canvases.get(fromKey), 0, 0);
++        this.canvases.set(key, canvas);
++        const frame = {key, name: null, source: null, dirty: true, thumb: null};
++        frame.thumb = this.makeThumb(key);
++        const next = frames.slice();
++        next.splice(current + 1, 0, frame);
++        this.setState({frames: next, current: current + 1, message: null});
++    }
++
++    insertKeyframe () {
++        const frame = this.currentFrame();
++        this.addFrame(frame ? frame.key : null);
++    }
++
++    insertBlank () {
++        this.addFrame(null);
++    }
++
++    deleteFrame () {
++        const {frames, current} = this.state;
++        if (frames.length <= 1) {
++            this.setState({message: 'A sprite needs at least one frame.'});
++            return;
++        }
++        const next = frames.slice();
++        next.splice(current, 1);
++        this.setState({frames: next, current: Math.min(current, next.length - 1), message: null});
++    }
++
++    moveFrame (delta) {
++        const {frames, current} = this.state;
++        const to = current + delta;
++        if (to < 0 || to >= frames.length) return;
++        const next = frames.slice();
++        const [f] = next.splice(current, 1);
++        next.splice(to, 0, f);
++        this.setState({frames: next, current: to});
++    }
++
++    goTo (index) {
++        const {frames} = this.state;
++        if (!frames.length) return;
++        const i = ((index % frames.length) + frames.length) % frames.length;
++        this.setState({current: i});
++    }
++
++    centroid (key) {
++        const small = makeCanvas(W / 4, H / 4);
++        const sctx = small.getContext('2d');
++        sctx.drawImage(this.canvases.get(key), 0, 0, W / 4, H / 4);
++        const d = sctx.getImageData(0, 0, W / 4, H / 4).data;
++        let sx = 0;
++        let sy = 0;
++        let n = 0;
++        for (let y = 0; y < H / 4; y++) {
++            for (let x = 0; x < W / 4; x++) {
++                const a = d[(((y * W) / 4) + x) * 4 + 3];
++                if (a > 20) {
++                    sx += x;
++                    sy += y;
++                    n++;
++                }
++            }
++        }
++        return n ? {x: (sx / n) * 4, y: (sy / n) * 4} : null;
++    }
++
++    /** Flash-style tween: fill in frames between this frame and the next one. */
++    tween () {
++        const {frames, current, tweenCount} = this.state;
++        const a = frames[current];
++        const b = frames[current + 1];
++        if (!a || !b) {
++            this.setState({message: 'Select the first of two frames to tween between.'});
++            return;
++        }
++        const count = Math.max(1, Math.min(30, tweenCount | 0));
++        if (frames.length + count > MAX_FRAMES) {
++            this.setState({message: `An animation can have up to ${MAX_FRAMES} frames.`});
++            return;
++        }
++        const ca = this.centroid(a.key);
++        const cb = this.centroid(b.key);
++        const dx = ca && cb ? cb.x - ca.x : 0;
++        const dy = ca && cb ? cb.y - ca.y : 0;
++        const srcA = this.canvases.get(a.key);
++        const srcB = this.canvases.get(b.key);
++        const made = [];
++        for (let i = 1; i <= count; i++) {
++            const t = i / (count + 1);
++            const key = nextKey++;
++            const canvas = makeCanvas();
++            const ctx = canvas.getContext('2d');
++            ctx.globalAlpha = 1 - t;
++            ctx.drawImage(srcA, dx * t, dy * t);
++            ctx.globalAlpha = t;
++            ctx.drawImage(srcB, -dx * (1 - t), -dy * (1 - t));
++            ctx.globalAlpha = 1;
++            this.canvases.set(key, canvas);
++            made.push({key, name: null, source: null, dirty: true, thumb: this.makeThumb(key)});
++        }
++        const next = frames.slice();
++        next.splice(current + 1, 0, ...made);
++        this.setState({frames: next, message: `Added ${count} tween frame${count === 1 ? '' : 's'}.`});
++    }
++
++    // ------------------------------------------------------------------ playback
++
++    togglePlay () {
++        if (this.state.playing) {
++            this.stopPlaying();
++            this.setState({playing: false}, () => this.renderView());
++        } else {
++            this.setState({playing: true}, () => this.startPlaying());
++        }
++    }
++
++    startPlaying () {
++        this.stopPlaying();
++        const tick = () => {
++            const {frames, current, loop, fps} = this.state;
++            if (current >= frames.length - 1 && !loop) {
++                this.setState({playing: false}, () => this.renderView());
++                return;
++            }
++            this.setState({current: (current + 1) % frames.length});
++            this.timer = setTimeout(tick, 1000 / Math.max(1, Math.min(60, fps || 12)));
++        };
++        this.timer = setTimeout(tick, 1000 / Math.max(1, this.state.fps || 12));
++    }
++
++    stopPlaying () {
++        clearTimeout(this.timer);
++        this.timer = null;
++    }
++
++    // ------------------------------------------------------------------ keyboard
++
++    handleKeyDown (e) {
++        const tag = (e.target && e.target.tagName) || '';
++        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
++        const key = e.key;
++        let handled = true;
++        if ((e.ctrlKey || e.metaKey) && key.toLowerCase() === 'z') {
++            if (e.shiftKey) this.redo();
++            else this.undo();
++        } else if ((e.ctrlKey || e.metaKey) && key.toLowerCase() === 'y') {
++            this.redo();
++        } else if (key === 'Enter') {
++            this.togglePlay();
++        } else if (key === 'F6') {
++            this.insertKeyframe();
++        } else if (key === 'F7') {
++            this.insertBlank();
++        } else if (key === ',' || key === 'ArrowLeft') {
++            this.goTo(this.state.current - 1);
++        } else if (key === '.' || key === 'ArrowRight') {
++            this.goTo(this.state.current + 1);
++        } else if (key === 'Delete') {
++            this.deleteFrame();
++        } else if (key === 'Escape') {
++            this.handleClose();
++        } else if (!e.ctrlKey && !e.metaKey && !e.altKey) {
++            const tool = TOOLS.find(t => t.key === key.toLowerCase());
++            if (tool) this.setState({tool: tool.id});
++            else handled = false;
++        } else {
++            handled = false;
++        }
++        if (handled) {
++            e.preventDefault();
++            e.stopPropagation();
++        }
++    }
++
++    // ------------------------------------------------------------------ saving
++
++    frameBlob (key) {
++        return new Promise(resolve => this.canvases.get(key).toBlob(resolve, 'image/png'));
++    }
++
++    async handleSave () {
++        const vm = this.props.vm;
++        const target = vm.editingTarget;
++        if (!target || this.state.saving) return;
++        this.stopPlaying();
++        this.setState({saving: true, playing: false, message: 'Saving your animation...'});
++        try {
++            const storage = vm.runtime.storage;
++            const used = new Set(target.getCostumes().map(c => c.name));
++            const uniqueName = () => {
++                let n = 1;
++                while (used.has(`frame${n}`)) n++;
++                used.add(`frame${n}`);
++                return `frame${n}`;
++            };
++            const desired = [];
++            for (const frame of this.state.frames) {
++                const canvas = this.canvases.get(frame.key);
++                if (frame.source && !frame.dirty) {
++                    desired.push(frame.source);
++                } else if (frame.source && target.getCostumes().indexOf(frame.source) !== -1 &&
++                    !desired.includes(frame.source)) {
++                    const index = target.getCostumes().indexOf(frame.source);
++                    vm.updateBitmap(index, canvas.getContext('2d').getImageData(0, 0, W, H), CX, CY, 2);
++                    desired.push(frame.source);
++                } else {
++                    const blob = await this.frameBlob(frame.key);
++                    const data = new Uint8Array(await blob.arrayBuffer());
++                    const asset = storage.createAsset(
++                        storage.AssetType.ImageBitmap, storage.DataFormat.PNG, data, null, true
++                    );
++                    const name = uniqueName();
++                    const costume = {
++                        name,
++                        dataFormat: 'png',
++                        asset,
++                        assetId: asset.assetId,
++                        md5: `${asset.assetId}.png`,
++                        bitmapResolution: 2,
++                        rotationCenterX: CX,
++                        rotationCenterY: CY
++                    };
++                    await vm.addCostume(costume.md5, costume, target.id);
++                    const all = target.getCostumes();
++                    desired.push(all.find(c => c.name === name) || all[all.length - 1]);
++                }
++            }
++            // remove costumes that were deleted from the timeline
++            const costumes = target.getCostumes();
++            for (let i = costumes.length - 1; i >= 0; i--) {
++                if (!desired.includes(costumes[i]) && target.getCostumes().length > 1) {
++                    vm.deleteCostume(i);
++                }
++            }
++            // put the costumes in timeline order
++            desired.forEach((costume, i) => {
++                const from = target.getCostumes().indexOf(costume);
++                if (from !== -1 && from !== i) vm.reorderCostume(target.id, from, i);
++            });
++            target.setCostume(0);
++            if (this.state.addScript && desired.length > 1) {
++                await this.addPlayScript(target, desired[0].name);
++            }
++            vm.emitTargetsUpdate();
++            vm.runtime.emitProjectChanged();
++            this.props.onClose(true);
++        } catch (e) {
++            console.error(e); // eslint-disable-line no-console
++            this.setState({saving: false, message: `Couldn't save the animation: ${e.message}`});
++        }
++    }
++
++    addPlayScript (target, firstName) {
++        const id = n => `slAnim${Date.now().toString(36)}${n}`;
++        const ids = [1, 2, 3, 4, 5, 6, 7].map(id);
++        const wait = Math.round((1 / Math.max(1, this.state.fps)) * 1000) / 1000;
++        const blocks = [
++            {id: ids[0], opcode: 'event_whenflagclicked', inputs: {}, fields: {}, next: ids[1], parent: null,
++                shadow: false, topLevel: true, x: 40, y: 40},
++            {id: ids[1], opcode: 'looks_switchcostumeto',
++                inputs: {COSTUME: {name: 'COSTUME', block: ids[2], shadow: ids[2]}}, fields: {},
++                next: ids[3], parent: ids[0], shadow: false, topLevel: false},
++            {id: ids[2], opcode: 'looks_costume', inputs: {}, fields: {COSTUME: {name: 'COSTUME', value: firstName}},
++                next: null, parent: ids[1], shadow: true, topLevel: false},
++            {id: ids[3], opcode: 'control_forever', inputs: {SUBSTACK: {name: 'SUBSTACK', block: ids[4], shadow: null}},
++                fields: {}, next: null, parent: ids[1], shadow: false, topLevel: false},
++            {id: ids[4], opcode: 'control_wait', inputs: {DURATION: {name: 'DURATION', block: ids[5], shadow: ids[5]}},
++                fields: {}, next: ids[6], parent: ids[3], shadow: false, topLevel: false},
++            {id: ids[5], opcode: 'math_positive_number', inputs: {}, fields: {NUM: {name: 'NUM', value: String(wait)}},
++                next: null, parent: ids[4], shadow: true, topLevel: false},
++            {id: ids[6], opcode: 'looks_nextcostume', inputs: {}, fields: {}, next: null, parent: ids[4],
++                shadow: false, topLevel: false}
++        ];
++        return Promise.resolve(this.props.vm.shareBlocksToTarget(blocks, target.id)).then(() => {
++            if (this.props.vm.editingTarget === target) this.props.vm.emitWorkspaceUpdate();
++        });
++    }
++
++    handleClose () {
++        if (this.state.saving) return;
++        const changed = this.state.frames.some(f => f.dirty) ||
++            this.state.frames.length !== (this.props.vm.editingTarget ? this.props.vm.editingTarget.getCostumes().length : 0);
++        // eslint-disable-next-line no-alert
++        if (changed && !window.confirm('Close Animate without saving? Your frames will be lost.')) return;
++        this.props.onClose(false);
++    }
++
++    // ------------------------------------------------------------------ UI
++
++    render () {
++        const {frames, current, tool, color, size, filled, onion, playing, fps, loop, addScript,
++            loading, saving, message} = this.state;
++        return (
++            <div className={styles.animate}>
++                <div className={styles.topBar}>
++                    <span className={styles.title}>
++                        <svg
++                            aria-hidden="true"
++                            height="20"
++                            viewBox="0 0 24 24"
++                            width="20"
++                        ><path
++                            d="M3 6 H21 V18 H3 Z M3 9 H21 M3 15 H21 M7 6 V9 M12 6 V9 M17 6 V9 M7 15 V18 M12 15 V18 M17 15 V18"
++                            fill="none"
++                            stroke="currentColor"
++                            strokeWidth="1.8"
++                        /></svg>
++                        {'Animate'}
++                    </span>
++                    <span className={styles.hint}>
++                        {'Each frame is a costume. F6 copy frame · F7 blank frame · Tween fills the gap to the next frame · Enter play'}
++                    </span>
++                    <span className={styles.topButtons}>
++                        <button
++                            className={styles.button}
++                            disabled={saving}
++                            onClick={this.handleClose}
++                        >{'Cancel'}</button>
++                        <button
++                            className={classNames(styles.button, styles.primary)}
++                            disabled={saving || loading}
++                            onClick={this.handleSave}
++                        >{saving ? 'Saving...' : 'Save to costumes'}</button>
++                    </span>
++                </div>
++                <div className={styles.main}>
++                    <div className={styles.tools}>
++                        {TOOLS.map(t => (
++                            <button
++                                key={t.id}
++                                className={classNames(styles.tool, {[styles.toolActive]: tool === t.id})}
++                                title={`${t.label} (${t.key.toUpperCase()})`}
++                                onClick={() => this.setState({tool: t.id})} // eslint-disable-line react/jsx-no-bind
++                            >
++                                <svg
++                                    aria-hidden="true"
++                                    height="22"
++                                    viewBox="0 0 24 24"
++                                    width="22"
++                                ><path
++                                    d={t.icon}
++                                    fill="none"
++                                    stroke="currentColor"
++                                    strokeLinecap="round"
++                                    strokeLinejoin="round"
++                                    strokeWidth="2"
++                                /></svg>
++                            </button>
++                        ))}
++                        <div className={styles.toolSep} />
++                        <button
++                            className={styles.tool}
++                            title="Undo (Ctrl+Z)"
++                            onClick={this.undo}
++                        >{'↶'}</button>
++                        <button
++                            className={styles.tool}
++                            title="Redo (Ctrl+Y)"
++                            onClick={this.redo}
++                        >{'↷'}</button>
++                    </div>
++                    <div className={styles.stageArea}>
++                        <div className={styles.stageFrame}>
++                            <canvas
++                                className={classNames(styles.view, styles[`cursor-${tool}`])}
++                                height={H}
++                                ref={this.viewRef}
++                                width={W}
++                                onPointerDown={this.handlePointerDown}
++                                onPointerMove={this.handlePointerMove}
++                                onPointerUp={this.handlePointerUp}
++                                onPointerCancel={this.handlePointerUp}
++                            />
++                            {loading ? <div className={styles.loading}>{'Loading costumes...'}</div> : null}
++                        </div>
++                    </div>
++                    <div className={styles.props}>
++                        <div className={styles.propLabel}>{'Colour'}</div>
++                        <div className={styles.swatches}>
++                            {SWATCHES.map(c => (
++                                <button
++                                    key={c}
++                                    aria-label={c}
++                                    className={classNames(styles.swatch, {[styles.swatchActive]: c === color})}
++                                    style={{background: c}}
++                                    onClick={() => this.setState({color: c})} // eslint-disable-line react/jsx-no-bind
++                                />
++                            ))}
++                        </div>
++                        <input
++                            className={styles.colorInput}
++                            type="color"
++                            value={color}
++                            onChange={e => this.setState({color: e.target.value})} // eslint-disable-line react/jsx-no-bind
++                        />
++                        <div className={styles.propLabel}>{`Size: ${size}`}</div>
++                        <input
++                            max="80"
++                            min="1"
++                            type="range"
++                            value={size}
++                            onChange={e => this.setState({size: +e.target.value})} // eslint-disable-line react/jsx-no-bind
++                        />
++                        <label className={styles.check}>
++                            <input
++                                checked={filled}
++                                type="checkbox"
++                                onChange={e => this.setState({filled: e.target.checked})} // eslint-disable-line react/jsx-no-bind
++                            />
++                            {'Filled shapes'}
++                        </label>
++                        <div className={styles.propSep} />
++                        <label className={styles.check}>
++                            <input
++                                checked={onion}
++                                type="checkbox"
++                                onChange={e => this.setState({onion: e.target.checked})} // eslint-disable-line react/jsx-no-bind
++                            />
++                            {'Onion skin'}
++                        </label>
++                        <div className={styles.onionKey}>
++                            <span className={styles.onionPrev} />{'previous'}
++                            <span className={styles.onionNext} />{'next'}
++                        </div>
++                        <div className={styles.propSep} />
++                        <label className={styles.check}>
++                            <input
++                                checked={addScript}
++                                type="checkbox"
++                                onChange={e => this.setState({addScript: e.target.checked})} // eslint-disable-line react/jsx-no-bind
++                            />
++                            {'Add a script that plays the animation when the green flag is clicked'}
++                        </label>
++                        {message ? <div className={styles.message}>{message}</div> : null}
++                    </div>
++                </div>
++                <div className={styles.timeline}>
++                    <div className={styles.controls}>
++                        <button
++                            className={styles.ctrl}
++                            title="Previous frame (,)"
++                            onClick={() => this.goTo(current - 1)} // eslint-disable-line react/jsx-no-bind
++                        >{'⏮'}</button>
++                        <button
++                            className={classNames(styles.ctrl, styles.playButton)}
++                            title="Play / stop (Enter)"
++                            onClick={this.togglePlay}
++                        >{playing ? '■' : '▶'}</button>
++                        <button
++                            className={styles.ctrl}
++                            title="Next frame (.)"
++                            onClick={() => this.goTo(current + 1)} // eslint-disable-line react/jsx-no-bind
++                        >{'⏭'}</button>
++                        <label className={styles.fps}>
++                            <input
++                                max="60"
++                                min="1"
++                                type="number"
++                                value={fps}
++                                onChange={e => this.setState({fps: Math.max(1, Math.min(60, +e.target.value || 1))})} // eslint-disable-line react/jsx-no-bind
++                            />
++                            {'fps'}
++                        </label>
++                        <label className={styles.check}>
++                            <input
++                                checked={loop}
++                                type="checkbox"
++                                onChange={e => this.setState({loop: e.target.checked})} // eslint-disable-line react/jsx-no-bind
++                            />
++                            {'Loop'}
++                        </label>
++                        <span className={styles.ctrlSep} />
++                        <button
++                            className={styles.button}
++                            title="Copy this frame into a new frame (F6)"
++                            onClick={this.insertKeyframe}
++                        >{'+ Keyframe'}</button>
++                        <button
++                            className={styles.button}
++                            title="Add an empty frame (F7)"
++                            onClick={this.insertBlank}
++                        >{'+ Blank'}</button>
++                        <button
++                            className={styles.button}
++                            title="Move frame left"
++                            onClick={() => this.moveFrame(-1)} // eslint-disable-line react/jsx-no-bind
++                        >{'◀'}</button>
++                        <button
++                            className={styles.button}
++                            title="Move frame right"
++                            onClick={() => this.moveFrame(1)} // eslint-disable-line react/jsx-no-bind
++                        >{'▶'}</button>
++                        <button
++                            className={styles.button}
++                            title="Delete frame (Delete)"
++                            onClick={this.deleteFrame}
++                        >{'Delete'}</button>
++                        <span className={styles.ctrlSep} />
++                        <button
++                            className={styles.button}
++                            title="Make in-between frames from this frame to the next one, like a Flash tween"
++                            onClick={this.tween}
++                        >{'Tween'}</button>
++                        <label className={styles.fps}>
++                            <input
++                                max="30"
++                                min="1"
++                                type="number"
++                                value={this.state.tweenCount}
++                                onChange={e => this.setState({tweenCount: Math.max(1, Math.min(30, +e.target.value || 1))})} // eslint-disable-line react/jsx-no-bind
++                            />
++                            {'in-betweens'}
++                        </label>
++                        <span className={styles.frameCount}>{`Frame ${current + 1} of ${frames.length}`}</span>
++                    </div>
++                    <div className={styles.cells}>
++                        {frames.map((f, i) => (
++                            <button
++                                key={f.key}
++                                className={classNames(styles.cell, {[styles.cellActive]: i === current})}
++                                title={f.name || 'New frame'}
++                                onClick={() => this.setState({current: i})} // eslint-disable-line react/jsx-no-bind
++                            >
++                                <span className={styles.cellNumber}>{i + 1}</span>
++                                {f.thumb ? <img
++                                    alt=""
++                                    className={styles.cellThumb}
++                                    draggable={false}
++                                    src={f.thumb}
++                                /> : null}
++                                {f.dirty ? <span className={styles.cellDot} /> : null}
++                            </button>
++                        ))}
++                    </div>
++                </div>
++            </div>
++        );
++    }
++}
++
++AnimateEditor.propTypes = {
++    onClose: PropTypes.func.isRequired,
++    vm: PropTypes.shape({
++        editingTarget: PropTypes.object,
++        runtime: PropTypes.object
++    }).isRequired
++};
++
++export default AnimateEditor;
+diff --git a/src/components/sl-animate/animate.css b/src/components/sl-animate/animate.css
+new file mode 100644
+index 0000000..4890fb7
+--- /dev/null
++++ b/src/components/sl-animate/animate.css
+@@ -0,0 +1,440 @@
++/* Stick Lab Animate (Aero style) */
++
++.animate-bar {
++    display: flex;
++    align-items: center;
++    gap: 0.6rem;
++    padding: 0.35rem 0.6rem;
++    background: linear-gradient(180deg, #fdfeff 0%, #ebf2fb 45%, #d6e4f5 50%, #e3edf9 100%);
++    border-bottom: 1px solid #a9bcd3;
++    font-family: Verdana, Tahoma, "Segoe UI", sans-serif;
++    font-size: 0.72rem;
++    color: #333;
++}
++
++.animate-bar-button {
++    display: inline-flex;
++    align-items: center;
++    gap: 0.35rem;
++    padding: 0.3rem 0.8rem;
++    border: 1px solid #1b4f8f;
++    border-radius: 4px;
++    background: linear-gradient(180deg, #9fd0f7 0%, #5ea6e8 45%, #2a6ab8 50%, #3a87d6 100%);
++    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 1px 3px rgba(29, 79, 145, 0.35);
++    color: #ffffff;
++    font: bold 0.8rem "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
++    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
++    cursor: pointer;
++}
++
++.animate-bar-button:hover {
++    filter: brightness(1.08);
++}
++
++.with-bar {
++    display: flex;
++    flex-direction: column;
++    height: 100%;
++    width: 100%;
++    min-height: 0;
++}
++
++.with-bar-body {
++    flex: 1;
++    min-height: 0;
++    display: flex;
++}
++
++/* ---- the editor ---- */
++
++.animate {
++    position: absolute;
++    inset: 0;
++    z-index: 60;
++    display: flex;
++    flex-direction: column;
++    background: #dfe8f3;
++    font-family: Verdana, Tahoma, "Segoe UI", sans-serif;
++    font-size: 0.75rem;
++    color: #1f3550;
++    border: 1px solid #9db4cf;
++    border-radius: 3px;
++}
++
++.top-bar {
++    display: flex;
++    align-items: center;
++    gap: 0.75rem;
++    padding: 0.4rem 0.6rem;
++    background: linear-gradient(180deg, #a3d2f7 0%, #62a7e8 46%, #2a6ab8 50%, #3283d6 100%);
++    color: #ffffff;
++    border-bottom: 1px solid #1b4f8f;
++}
++
++.title {
++    display: inline-flex;
++    align-items: center;
++    gap: 0.4rem;
++    font: bold 1rem "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
++    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
++}
++
++.hint {
++    opacity: 0.9;
++    font-size: 0.68rem;
++    white-space: nowrap;
++    overflow: hidden;
++    text-overflow: ellipsis;
++}
++
++.top-buttons {
++    margin-left: auto;
++    display: flex;
++    gap: 0.4rem;
++}
++
++.button {
++    font: bold 0.72rem Verdana, Tahoma, sans-serif;
++    color: #1d4f91;
++    padding: 0.3rem 0.65rem;
++    border: 1px solid #8ea4c1;
++    border-radius: 3px;
++    background: linear-gradient(180deg, #ffffff 0%, #f2f6fb 45%, #dde7f3 50%, #e8eff8 100%);
++    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
++    cursor: pointer;
++    white-space: nowrap;
++}
++
++.button:hover {
++    background: linear-gradient(180deg, #f4faff 0%, #ddf0ff 45%, #bfe0fb 50%, #d4ecfd 100%);
++    border-color: #3c7fb1;
++}
++
++.button:disabled {
++    opacity: 0.6;
++    cursor: default;
++}
++
++.primary {
++    color: #ffffff;
++    border-color: #1e6b2e;
++    background: linear-gradient(180deg, #b6eab0 0%, #6cc35a 45%, #2e8b3e 50%, #44a653 100%);
++    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
++}
++
++.primary:hover {
++    background: linear-gradient(180deg, #c9f2c4 0%, #7fd16d 45%, #349a46 50%, #4fb75f 100%);
++    border-color: #1e6b2e;
++}
++
++.main {
++    flex: 1;
++    min-height: 0;
++    display: flex;
++}
++
++.tools {
++    width: 3rem;
++    flex: none;
++    display: flex;
++    flex-direction: column;
++    align-items: center;
++    gap: 3px;
++    padding: 0.4rem 0;
++    background: linear-gradient(90deg, #f7faff, #e3ecf7);
++    border-right: 1px solid #a9bcd3;
++}
++
++.tool {
++    width: 2.3rem;
++    height: 2.3rem;
++    display: flex;
++    align-items: center;
++    justify-content: center;
++    border: 1px solid transparent;
++    border-radius: 4px;
++    background: transparent;
++    color: #1d4f91;
++    font-size: 1.1rem;
++    cursor: pointer;
++}
++
++.tool:hover {
++    border-color: #8ea4c1;
++    background: linear-gradient(180deg, #ffffff 0%, #f2f6fb 45%, #dde7f3 50%, #e8eff8 100%);
++}
++
++.tool-active,
++.tool-active:hover {
++    border-color: #3c7fb1;
++    background: linear-gradient(180deg, #f4faff 0%, #ddf0ff 45%, #bfe0fb 50%, #d4ecfd 100%);
++    box-shadow: inset 0 1px 2px rgba(29, 79, 145, 0.25);
++}
++
++.tool-sep {
++    width: 70%;
++    height: 1px;
++    background: #a9bcd3;
++    margin: 0.3rem 0;
++}
++
++.stage-area {
++    flex: 1;
++    min-width: 0;
++    min-height: 0;
++    display: flex;
++    align-items: center;
++    justify-content: center;
++    padding: 0.6rem;
++    background: repeating-conic-gradient(#e7eef7 0% 25%, #f3f7fc 0% 50%) 50% / 20px 20px;
++}
++
++.stage-frame {
++    position: relative;
++    display: flex;
++    max-width: 100%;
++    max-height: 100%;
++    aspect-ratio: 4 / 3;
++    height: 100%;
++    background: #ffffff;
++    border: 1px solid #8ea4c1;
++    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7), 0 3px 10px rgba(30, 70, 120, 0.25);
++}
++
++.view {
++    width: 100%;
++    height: 100%;
++    touch-action: none;
++    cursor: crosshair;
++}
++
++.cursor-move {
++    cursor: move;
++}
++
++.cursor-picker,
++.cursor-fill {
++    cursor: cell;
++}
++
++.loading {
++    position: absolute;
++    inset: 0;
++    display: flex;
++    align-items: center;
++    justify-content: center;
++    background: rgba(255, 255, 255, 0.8);
++    font-weight: bold;
++}
++
++.props {
++    width: 11.5rem;
++    flex: none;
++    padding: 0.5rem 0.6rem;
++    background: linear-gradient(90deg, #e9f0f9, #f7faff);
++    border-left: 1px solid #a9bcd3;
++    overflow-y: auto;
++    display: flex;
++    flex-direction: column;
++    gap: 0.35rem;
++}
++
++.prop-label {
++    font-weight: bold;
++    color: #1d4f91;
++}
++
++.swatches {
++    display: grid;
++    grid-template-columns: repeat(6, 1fr);
++    gap: 3px;
++}
++
++.swatch {
++    height: 1.35rem;
++    border: 1px solid #8ea4c1;
++    border-radius: 3px;
++    cursor: pointer;
++    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
++}
++
++.swatch-active {
++    outline: 2px solid #2a6ab8;
++    outline-offset: 1px;
++}
++
++.color-input {
++    width: 100%;
++    height: 1.8rem;
++    border: 1px solid #8ea4c1;
++    border-radius: 3px;
++    padding: 0;
++    background: #ffffff;
++}
++
++.check {
++    display: flex;
++    align-items: flex-start;
++    gap: 0.35rem;
++    line-height: 1.3;
++    cursor: pointer;
++}
++
++.prop-sep {
++    height: 1px;
++    background: #c3d1e2;
++    margin: 0.2rem 0;
++}
++
++.onion-key {
++    display: flex;
++    align-items: center;
++    gap: 0.3rem;
++    font-size: 0.68rem;
++    color: #555;
++}
++
++.onion-prev,
++.onion-next {
++    display: inline-block;
++    width: 0.7rem;
++    height: 0.7rem;
++    border-radius: 2px;
++    background: #e53935;
++    opacity: 0.6;
++    margin-left: 0.2rem;
++}
++
++.onion-next {
++    background: #43a047;
++}
++
++.message {
++    padding: 0.35rem;
++    border: 1px solid #e6d58a;
++    background: #fffbe6;
++    border-radius: 3px;
++}
++
++.timeline {
++    flex: none;
++    border-top: 1px solid #a9bcd3;
++    background: #eef3fa;
++}
++
++.controls {
++    display: flex;
++    align-items: center;
++    gap: 0.35rem;
++    padding: 0.3rem 0.5rem;
++    background: linear-gradient(180deg, #fdfeff 0%, #ebf2fb 45%, #d6e4f5 50%, #e3edf9 100%);
++    border-bottom: 1px solid #c3d1e2;
++    flex-wrap: wrap;
++}
++
++.ctrl {
++    width: 2rem;
++    height: 1.7rem;
++    border: 1px solid #8ea4c1;
++    border-radius: 3px;
++    background: linear-gradient(180deg, #ffffff 0%, #f2f6fb 45%, #dde7f3 50%, #e8eff8 100%);
++    color: #1d4f91;
++    cursor: pointer;
++}
++
++.play-button {
++    width: 2.6rem;
++    color: #ffffff;
++    border-color: #1b4f8f;
++    background: linear-gradient(180deg, #9fd0f7 0%, #5ea6e8 45%, #2a6ab8 50%, #3a87d6 100%);
++}
++
++.fps {
++    display: inline-flex;
++    align-items: center;
++    gap: 0.25rem;
++}
++
++.fps input {
++    width: 3rem;
++    padding: 0.15rem 0.25rem;
++    border: 1px solid #8ea4c1;
++    border-radius: 3px;
++}
++
++.ctrl-sep {
++    width: 1px;
++    align-self: stretch;
++    background: #a9bcd3;
++    margin: 0 0.2rem;
++}
++
++.frame-count {
++    margin-left: auto;
++    font-weight: bold;
++    color: #1d4f91;
++}
++
++.cells {
++    display: flex;
++    gap: 4px;
++    padding: 0.4rem 0.5rem 0.5rem;
++    overflow-x: auto;
++    min-height: 5.6rem;
++}
++
++.cell {
++    position: relative;
++    flex: none;
++    width: 5.6rem;
++    height: 4.8rem;
++    padding: 1rem 0.2rem 0.2rem;
++    border: 1px solid #a9bcd3;
++    border-radius: 3px;
++    background: #ffffff;
++    cursor: pointer;
++}
++
++.cell:hover {
++    border-color: #3c7fb1;
++}
++
++.cell-active {
++    border: 2px solid #2a6ab8;
++    background: #e4f1ff;
++    box-shadow: 0 0 6px rgba(94, 166, 232, 0.6);
++}
++
++.cell-number {
++    position: absolute;
++    top: 1px;
++    left: 4px;
++    font-size: 0.65rem;
++    font-weight: bold;
++    color: #1d4f91;
++}
++
++.cell-thumb {
++    width: 100%;
++    height: 100%;
++    object-fit: contain;
++    background: repeating-conic-gradient(#eef3fa 0% 25%, #ffffff 0% 50%) 50% / 10px 10px;
++}
++
++.cell-dot {
++    position: absolute;
++    top: 4px;
++    right: 4px;
++    width: 0.45rem;
++    height: 0.45rem;
++    border-radius: 50%;
++    background: #fb8c00;
++}
++
++.tab-root {
++    position: relative;
++    display: flex;
++    flex-grow: 1;
++    min-width: 0;
++    min-height: 0;
++}
 diff --git a/src/components/sl-text-code/code-mode-store.js b/src/components/sl-text-code/code-mode-store.js
 new file mode 100644
 index 0000000..37758b3
@@ -1035,6 +2487,111 @@ index 1a93708..2b08868 100644
          this.workspace.dispose();
          clearTimeout(this.toolboxUpdateTimeout);
  
+diff --git a/src/containers/costume-tab.jsx b/src/containers/costume-tab.jsx
+index 86a0f10..e8b453a 100644
+--- a/src/containers/costume-tab.jsx
++++ b/src/containers/costume-tab.jsx
+@@ -6,6 +6,8 @@ import VM from 'scratch-vm';
+ 
+ import AssetPanel from '../components/asset-panel/asset-panel.jsx';
+ import PaintEditorWrapper from './paint-editor-wrapper.jsx';
++import AnimateEditor from '../components/sl-animate/animate-editor.jsx';
++import animateStyles from '../components/sl-animate/animate.css';
+ import {connect} from 'react-redux';
+ import {handleFileUpload, costumeUpload} from '../lib/file-uploader.js';
+ import errorBoundaryHOC from '../lib/error-boundary-hoc.jsx';
+@@ -75,6 +77,8 @@ class CostumeTab extends React.Component {
+     constructor (props) {
+         super(props);
+         bindAll(this, [
++            'handleOpenAnimate',
++            'handleCloseAnimate',
+             'handleSelectCostume',
+             'handleDeleteCostume',
+             'handleDuplicateCostume',
+@@ -95,9 +99,9 @@ class CostumeTab extends React.Component {
+         } = props;
+         const target = editingTarget && sprites[editingTarget] ? sprites[editingTarget] : stage;
+         if (target && target.currentCostume) {
+-            this.state = {selectedCostumeIndex: target.currentCostume};
++            this.state = {selectedCostumeIndex: target.currentCostume, animateOpen: false};
+         } else {
+-            this.state = {selectedCostumeIndex: 0};
++            this.state = {selectedCostumeIndex: 0, animateOpen: false};
+         }
+     }
+     componentWillReceiveProps (nextProps) {
+@@ -244,6 +248,15 @@ class CostumeTab extends React.Component {
+         // https://github.com/LLK/scratch-flash/blob/9fbac92ef3d09ceca0c0782f8a08deaa79e4df69/src/ui/media/MediaInfo.as#L224-L237
+         return `${Math.ceil(size[0] / resolution)} x ${Math.ceil(size[1] / resolution)}`;
+     }
++    handleOpenAnimate () {
++        this.setState({animateOpen: true});
++    }
++    handleCloseAnimate (saved) {
++        this.setState({animateOpen: false});
++        if (saved && this.props.vm.editingTarget) {
++            this.setState({selectedCostumeIndex: this.props.vm.editingTarget.currentCostume});
++        }
++    }
+     render () {
+         const {
+             dispatchUpdateRestore, // eslint-disable-line no-unused-vars
+@@ -274,6 +287,7 @@ class CostumeTab extends React.Component {
+             dragPayload: costume
+         })) : [];
+         return (
++            <div className={animateStyles.tabRoot}>
+             <AssetPanel
+                 buttons={[
+                     {
+@@ -318,12 +332,43 @@ class CostumeTab extends React.Component {
+                 onItemClick={this.handleSelectCostume}
+             >
+                 {target.costumes ?
+-                    <PaintEditorWrapper
+-                        selectedCostumeIndex={this.state.selectedCostumeIndex}
+-                    /> :
++                    <div className={animateStyles.withBar}>
++                        <div className={animateStyles.animateBar}>
++                            <button
++                                className={animateStyles.animateBarButton}
++                                onClick={this.handleOpenAnimate}
++                            >
++                                <svg
++                                    aria-hidden="true"
++                                    height="16"
++                                    viewBox="0 0 24 24"
++                                    width="16"
++                                ><path
++                                    d="M3 6 H21 V18 H3 Z M3 9 H21 M3 15 H21 M7 6 V9 M12 6 V9 M17 6 V9 M7 15 V18 M12 15 V18 M17 15 V18"
++                                    fill="none"
++                                    stroke="currentColor"
++                                    strokeWidth="2"
++                                /></svg>
++                                {'Animate'}
++                            </button>
++                            <span>{'Make a Flash-style animation with a timeline. Each frame becomes a costume.'}</span>
++                        </div>
++                        <div className={animateStyles.withBarBody}>
++                            <PaintEditorWrapper
++                                selectedCostumeIndex={this.state.selectedCostumeIndex}
++                            />
++                        </div>
++                    </div> :
+                     null
+                 }
+             </AssetPanel>
++            {this.state.animateOpen ? (
++                <AnimateEditor
++                    vm={this.props.vm}
++                    onClose={this.handleCloseAnimate}
++                />
++            ) : null}
++            </div>
+         );
+     }
+ }
 diff --git a/src/containers/sb3-downloader.jsx b/src/containers/sb3-downloader.jsx
 index 3f4773c..882a839 100644
 --- a/src/containers/sb3-downloader.jsx
