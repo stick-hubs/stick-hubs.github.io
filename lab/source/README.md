@@ -11,7 +11,8 @@ Stick Lab is not affiliated with Scratch, the Scratch Team, the Scratch Foundati
 1. Get TurboWarp's editor source at commit `7738389`:
    `git clone https://github.com/TurboWarp/scratch-gui && cd scratch-gui && git checkout 7738389`
 2. Apply the Stick Lab changes: `git apply stick-lab-gui.patch`
-3. `npm ci --ignore-scripts`, then `NODE_ENV=production npx webpack`. The editor ends up in `build/`.
+3. `npm ci --ignore-scripts`, then `node scripts/sl-patch-scratch-blocks.cjs` (classic block shapes),
+   then `NODE_ENV=production npx webpack`. The editor ends up in `build/`.
 
 ## Desktop apps
 
@@ -25,3 +26,9 @@ Stick Lab is not affiliated with Scratch, the Scratch Team, the Scratch Foundati
 A `.sl` file is a Scratch 3 project (`.sb3` zip) with the 8-byte header `STICKLAB`, a version byte (1),
 and then the zip data scrambled with a 16-byte XOR key. See `src/lib/sl-format.js` in the patch.
 Stick Lab also still opens `.sb3`, `.sb2` and `.sb` files.
+
+## Text coding
+
+The Script tab has a Blocks/Text switch. Text coding turns a sprite's scripts into text and back
+(`src/lib/sl-text-code/`). Unchanged scripts keep their blocks; scripts that can't be written as
+text are shown as `locked_script("id")` lines and are kept as they are.

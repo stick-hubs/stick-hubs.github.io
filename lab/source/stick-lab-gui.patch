@@ -1,6 +1,119 @@
+diff --git a/scripts/sl-patch-scratch-blocks.cjs b/scripts/sl-patch-scratch-blocks.cjs
+new file mode 100644
+index 0000000..d24d7e0
+--- /dev/null
++++ b/scripts/sl-patch-scratch-blocks.cjs
+@@ -0,0 +1,37 @@
++// Stick Lab: classic, squarer block shapes.
++// Run after `npm ci` and before building: node scripts/sl-patch-scratch-blocks.cjs
++const fs = require('fs');
++const path = require('path');
++const file = path.join(__dirname, '..', 'node_modules', 'scratch-blocks', 'blockly_compressed_vertical.js');
++let s = fs.readFileSync(file, 'utf8');
++if (s.includes('/*sticklab-shapes*/')) {
++    console.log('scratch-blocks already patched');
++    process.exit(0);
++}
++const swaps = [
++    // straight-sided notch instead of the curvy Scratch notch (same width and depth)
++    ['Blockly.BlockSvg.NOTCH_PATH_LEFT="c 2,0 3,1 4,2 l 4,4 c 1,1 2,2 4,2 h 12 c 2,0 3,-1 4,-2 l 4,-4 c 1,-1 2,-2 4,-2"',
++        'Blockly.BlockSvg.NOTCH_PATH_LEFT="l 8,8 h 20 l 8,-8"'],
++    ['Blockly.BlockSvg.NOTCH_PATH_RIGHT="c -2,0 -3,1 -4,2 l -4,4 c -1,1 -2,2 -4,2 h -12 c -2,0 -3,-1 -4,-2 l -4,-4 c -1,-1 -2,-2 -4,-2"',
++        'Blockly.BlockSvg.NOTCH_PATH_RIGHT="l -8,8 h -20 l -8,-8"'],
++    // flat-topped hat with angled sides instead of the round cap
++    ['Blockly.BlockSvg.START_HAT_PATH="c 25,-22 71,-22 96,0"',
++        'Blockly.BlockSvg.START_HAT_PATH="l 16,-16 h 64 l 16,16"'],
++    // smaller corners
++    ['Blockly.BlockSvg.CORNER_RADIUS=1*Blockly.BlockSvg.GRID_UNIT', 'Blockly.BlockSvg.CORNER_RADIUS=.5*Blockly.BlockSvg.GRID_UNIT'],
++    ['Blockly.BlockSvg.NUMBER_FIELD_CORNER_RADIUS=4*Blockly.BlockSvg.GRID_UNIT', 'Blockly.BlockSvg.NUMBER_FIELD_CORNER_RADIUS=1*Blockly.BlockSvg.GRID_UNIT'],
++    ['Blockly.BlockSvg.FIELD_DEFAULT_CORNER_RADIUS=4*Blockly.BlockSvg.GRID_UNIT', 'Blockly.BlockSvg.FIELD_DEFAULT_CORNER_RADIUS=1*Blockly.BlockSvg.GRID_UNIT'],
++    // round reporters become rounded rectangles (left edge, drawn upwards)
++    ['this.edgeShape_===Blockly.OUTPUT_SHAPE_ROUND?a.push("a "+this.edgeShapeWidth_+" "+this.edgeShapeWidth_+" 0 0 1 0 -"+2*this.edgeShapeWidth_)',
++        'this.edgeShape_===Blockly.OUTPUT_SHAPE_ROUND?a.push(/*sticklab-shapes*/"h "+-(this.edgeShapeWidth_-4)+" a 4 4 0 0 1 -4 -4 v "+-(2*this.edgeShapeWidth_-8)+" a 4 4 0 0 1 4 -4 h "+(this.edgeShapeWidth_-4))'],
++    // ...and the right edge, drawn downwards
++    ['this.edgeShape_===Blockly.OUTPUT_SHAPE_ROUND?a.push("a "+this.edgeShapeWidth_+" "+this.edgeShapeWidth_+" 0 0 1 0 "+2*this.edgeShapeWidth_)',
++        'this.edgeShape_===Blockly.OUTPUT_SHAPE_ROUND?a.push("h "+(this.edgeShapeWidth_-4)+" a 4 4 0 0 1 4 4 v "+(2*this.edgeShapeWidth_-8)+" a 4 4 0 0 1 -4 4 h "+-(this.edgeShapeWidth_-4))']
++];
++for (const [from, to] of swaps) {
++    const count = s.split(from).length - 1;
++    if (count !== 1) throw new Error(`Expected 1 match, found ${count}: ${from.slice(0, 80)}`);
++    s = s.replace(from, to);
++}
++fs.writeFileSync(file, s);
++console.log('scratch-blocks patched for Stick Lab shapes');
 diff --git a/src/components/action-menu/icon--sprite.svg b/src/components/action-menu/icon--sprite.svg
 index 12c4a8b..b743363 100644
 Binary files a/src/components/action-menu/icon--sprite.svg and b/src/components/action-menu/icon--sprite.svg differ
+diff --git a/src/components/gui/gui.css b/src/components/gui/gui.css
+index ad44099..b8bac73 100644
+--- a/src/components/gui/gui.css
++++ b/src/components/gui/gui.css
+@@ -235,13 +235,14 @@
+ 
+ .extension-button-container {
+     width: 3.75rem;
+-    height: 3.25rem;
++    height: 6rem;
+     position: absolute;
+     bottom: 0;
+     left: 0;
+     right: 0;
+-    z-index: $z-index-extension-button;
++    z-index: 50;
+     background: $looks-secondary;
++    background-image: linear-gradient(180deg, #4f94dc, #1d5fa8);
+ 
+     border: 1px solid $looks-secondary;
+     box-sizing: content-box; /* To match scratch-block vertical toolbox borders */
+diff --git a/src/components/gui/gui.jsx b/src/components/gui/gui.jsx
+index 30f8336..51d12d9 100644
+--- a/src/components/gui/gui.jsx
++++ b/src/components/gui/gui.jsx
+@@ -44,6 +44,9 @@ import {Theme} from '../../lib/themes';
+ 
+ import {isRendererSupported, isBrowserSupported} from '../../lib/tw-environment-support-prober';
+ 
++import '../../lib/sl-classic-ui.js';
++import CodeModeToggle from '../sl-text-code/code-mode-toggle.jsx';
++import TextCodeEditor from '../sl-text-code/text-code-editor.jsx';
+ import styles from './gui.css';
+ import addExtensionIcon from './icon--extensions.svg';
+ import codeIcon from '!../../lib/tw-recolor/build!./icon--code.svg';
+@@ -343,9 +346,9 @@ const GUIComponent = props => {
+                                             src={codeIcon()}
+                                         />
+                                         <FormattedMessage
+-                                            defaultMessage="Code"
+-                                            description="Button to get to the code panel"
+-                                            id="gui.gui.codeTab"
++                                            defaultMessage="Script"
++                                            description="Button to get to the script panel"
++                                            id="sl.gui.scriptTab"
+                                         />
+                                     </Tab>
+                                     <Tab
+@@ -400,19 +403,10 @@ const GUIComponent = props => {
+                                             theme={theme}
+                                             vm={vm}
+                                         />
++                                        <TextCodeEditor vm={vm} />
+                                     </Box>
+                                     <Box className={styles.extensionButtonContainer}>
+-                                        <button
+-                                            className={styles.extensionButton}
+-                                            title={intl.formatMessage(messages.addExtension)}
+-                                            onClick={onExtensionButtonClick}
+-                                        >
+-                                            <img
+-                                                className={styles.extensionButtonIcon}
+-                                                draggable={false}
+-                                                src={addExtensionIcon}
+-                                            />
+-                                        </button>
++                                        <CodeModeToggle />
+                                     </Box>
+                                     <Box className={styles.watermark}>
+                                         <Watermark />
 diff --git a/src/components/menu-bar/menu-bar.css b/src/components/menu-bar/menu-bar.css
 index 444e77c..f53f367 100644
 --- a/src/components/menu-bar/menu-bar.css
@@ -104,6 +217,816 @@ index 4ebb5b4..7d881aa 100644
      [ACCENT_RED]: {
          defaultMessage: 'Red',
          description: 'Name of the red color scheme, used by TurboWarp by default.',
+diff --git a/src/components/sl-text-code/code-mode-store.js b/src/components/sl-text-code/code-mode-store.js
+new file mode 100644
+index 0000000..37758b3
+--- /dev/null
++++ b/src/components/sl-text-code/code-mode-store.js
+@@ -0,0 +1,37 @@
++// Stick Lab: which kind of coding is shown in the Script tab ("blocks" or "text").
++let mode = 'blocks';
++const listeners = new Set();
++const beforeChange = new Set();
++
++const getCodeMode = () => mode;
++
++/**
++ * @param {'blocks'|'text'} next New mode
++ * @returns {boolean} false if a listener refused the change (e.g. the text has a mistake)
++ */
++const setCodeMode = next => {
++    if (next === mode) return true;
++    for (const fn of beforeChange) {
++        if (fn(mode, next) === false) return false;
++    }
++    mode = next;
++    listeners.forEach(fn => fn(mode));
++    return true;
++};
++
++const onCodeModeChange = fn => {
++    listeners.add(fn);
++    return () => listeners.delete(fn);
++};
++
++const onBeforeCodeModeChange = fn => {
++    beforeChange.add(fn);
++    return () => beforeChange.delete(fn);
++};
++
++export {
++    getCodeMode,
++    setCodeMode,
++    onCodeModeChange,
++    onBeforeCodeModeChange
++};
+diff --git a/src/components/sl-text-code/code-mode-toggle.jsx b/src/components/sl-text-code/code-mode-toggle.jsx
+new file mode 100644
+index 0000000..ed9b62e
+--- /dev/null
++++ b/src/components/sl-text-code/code-mode-toggle.jsx
+@@ -0,0 +1,72 @@
++import React from 'react';
++import classNames from 'classnames';
++import {getCodeMode, setCodeMode, onCodeModeChange} from './code-mode-store';
++import styles from './text-code.css';
++
++const BlocksIcon = () => (
++    <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22">
++        <path d="M3 5h7l1.5 1.5L13 5h8v6h-8l-1.5 1.5L10 11H3z" fill="currentColor" />
++        <path d="M3 14h7l1.5 1.5L13 14h5v5H3z" fill="currentColor" opacity="0.75" />
++    </svg>
++);
++
++const TextIcon = () => (
++    <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22">
++        <path
++            d="M8 6l-5 6 5 6M16 6l5 6-5 6"
++            fill="none"
++            stroke="currentColor"
++            strokeLinecap="round"
++            strokeLinejoin="round"
++            strokeWidth="2.4"
++        />
++    </svg>
++);
++
++class CodeModeToggle extends React.Component {
++    constructor (props) {
++        super(props);
++        this.state = {mode: getCodeMode()};
++        this.handleBlocks = () => setCodeMode('blocks');
++        this.handleText = () => setCodeMode('text');
++    }
++    componentDidMount () {
++        this.unsubscribe = onCodeModeChange(mode => this.setState({mode}));
++    }
++    componentWillUnmount () {
++        this.unsubscribe();
++    }
++    render () {
++        const {mode} = this.state;
++        return (
++            <div
++                className={styles.toggle}
++                role="radiogroup"
++                aria-label="Type of coding"
++            >
++                <button
++                    aria-checked={mode === 'blocks'}
++                    className={classNames(styles.toggleButton, {[styles.toggleActive]: mode === 'blocks'})}
++                    role="radio"
++                    title="Block coding"
++                    onClick={this.handleBlocks}
++                >
++                    <BlocksIcon />
++                    <span>{'Blocks'}</span>
++                </button>
++                <button
++                    aria-checked={mode === 'text'}
++                    className={classNames(styles.toggleButton, {[styles.toggleActive]: mode === 'text'})}
++                    role="radio"
++                    title="Text coding"
++                    onClick={this.handleText}
++                >
++                    <TextIcon />
++                    <span>{'Text'}</span>
++                </button>
++            </div>
++        );
++    }
++}
++
++export default CodeModeToggle;
+diff --git a/src/components/sl-text-code/text-code-editor.jsx b/src/components/sl-text-code/text-code-editor.jsx
+new file mode 100644
+index 0000000..e9ce1e9
+--- /dev/null
++++ b/src/components/sl-text-code/text-code-editor.jsx
+@@ -0,0 +1,363 @@
++import React from 'react';
++import PropTypes from 'prop-types';
++import {connect} from 'react-redux';
++import classNames from 'classnames';
++import {getWorkspace, onWorkspaceChange} from '../../lib/sl-workspace-registry';
++import {workspaceToText} from '../../lib/sl-text-code/printer';
++import {applyText, commandList} from '../../lib/sl-text-code/apply';
++import {getCodeMode, onCodeModeChange, onBeforeCodeModeChange} from './code-mode-store';
++import styles from './text-code.css';
++
++const INDENT = '    ';
++
++const HELP = [
++    ['when_flag_clicked { ... }', 'A script. Every script starts with a "when" block.'],
++    ['move(10)', 'A command. Values go in ( ), separated by commas.'],
++    ['"hello"', 'Text and menu choices go in quotes.'],
++    ['$score   @items', '$ is a variable, @ is a list. Use $"my score" for names with spaces.'],
++    ['$score + 1   $x > 10', 'Maths: + - * / mod   Compare: > < ==   Logic: and or not'],
++    ['if ($x > 10) { } else { }', 'C blocks like if, repeat and forever use { }.'],
++    ['define "jump %s" (%height) { }', 'A custom block. Use it with call "jump %s" (50).'],
++    ['stack { ... }', 'Commands that aren\'t under a "when" block.'],
++    ['// note', 'A note for yourself. Stick Lab ignores it.']
++];
++
++class TextCodeEditor extends React.Component {
++    constructor (props) {
++        super(props);
++        this.state = {
++            mode: getCodeMode(),
++            text: '',
++            status: null,
++            errorLine: null,
++            groups: [],
++            openGroup: 0,
++            showHelp: false,
++            targetName: ''
++        };
++        this.lastAppliedText = null;
++        this.drafts = new Map();
++        this.textareaRef = React.createRef();
++        this.gutterRef = React.createRef();
++        this.handleChange = this.handleChange.bind(this);
++        this.handleKeyDown = this.handleKeyDown.bind(this);
++        this.handleBlur = this.handleBlur.bind(this);
++        this.handleScroll = this.handleScroll.bind(this);
++        this.handleWorkspaceUpdate = this.handleWorkspaceUpdate.bind(this);
++        this.handleToggleHelp = () => this.setState(s => ({showHelp: !s.showHelp}));
++        this.handleRefresh = this.handleRefresh.bind(this);
++    }
++    componentDidMount () {
++        this.unsubscribeMode = onCodeModeChange(mode => {
++            this.setState({mode});
++            if (mode === 'text') this.loadFromBlocks();
++        });
++        this.unsubscribeBefore = onBeforeCodeModeChange((from, to) => {
++            if (from === 'text' && to === 'blocks') return this.apply();
++            return true;
++        });
++        this.unsubscribeWorkspace = onWorkspaceChange(() => {
++            if (this.state.mode === 'text') setTimeout(() => this.loadFromBlocks(), 0);
++        });
++        this.props.vm.on('workspaceUpdate', this.handleWorkspaceUpdate);
++    }
++    componentDidUpdate (prevProps) {
++        if (prevProps.toolboxXML !== this.props.toolboxXML && this.state.mode === 'text') {
++            this.updateCommands();
++        }
++    }
++    componentWillUnmount () {
++        this.unsubscribeMode();
++        this.unsubscribeBefore();
++        this.unsubscribeWorkspace();
++        this.props.vm.removeListener('workspaceUpdate', this.handleWorkspaceUpdate);
++        clearTimeout(this.reloadTimeout);
++    }
++    getTargetId () {
++        return this.props.vm.editingTarget ? this.props.vm.editingTarget.id : null;
++    }
++    handleWorkspaceUpdate () {
++        // The editor switched to another sprite (or loaded a project). Keep unfinished text as a draft.
++        if (this.state.mode !== 'text') return;
++        if (this.loadedTargetId && this.state.text !== this.lastAppliedText && this.state.status &&
++            this.state.status.kind === 'error') {
++            this.drafts.set(this.loadedTargetId, this.state.text);
++        }
++        clearTimeout(this.reloadTimeout);
++        // Wait for the blocks workspace to show the new sprite first.
++        this.reloadTimeout = setTimeout(() => this.loadFromBlocks(), 120);
++    }
++    updateCommands () {
++        const ws = getWorkspace();
++        if (!ws) return;
++        try {
++            this.setState({groups: commandList(ws.ScratchBlocks, this.props.toolboxXML)});
++        } catch (e) {
++            this.setState({groups: []});
++        }
++    }
++    loadFromBlocks () {
++        const ws = getWorkspace();
++        if (!ws) return;
++        const targetId = this.getTargetId();
++        const target = this.props.vm.editingTarget;
++        this.loadedTargetId = targetId;
++        const draft = this.drafts.get(targetId);
++        let text;
++        try {
++            text = workspaceToText(ws.workspace, ws.ScratchBlocks).text;
++        } catch (e) {
++            text = `// Stick Lab couldn't show these scripts as text: ${e.message}\n`;
++        }
++        this.lastAppliedText = text;
++        if (draft) {
++            this.drafts.delete(targetId);
++            this.setState({
++                text: draft,
++                targetName: target ? target.getName() : '',
++                status: {kind: 'error', message: 'This text has a mistake, so it hasn\'t been turned into blocks yet.'}
++            });
++        } else {
++            this.setState({
++                text: text || '',
++                targetName: target ? target.getName() : '',
++                status: text ? null : {kind: 'info', message: 'No scripts yet. Try: when_flag_clicked { say("Hello!") }'},
++                errorLine: null
++            });
++        }
++        this.updateCommands();
++    }
++    /**
++     * Turn the text into blocks.
++     * @returns {boolean} false if the text has a mistake
++     */
++    apply () {
++        const ws = getWorkspace();
++        if (!ws) return true;
++        if (this.state.text === this.lastAppliedText) return true;
++        if (this.getTargetId() !== this.loadedTargetId) return true;
++        try {
++            const result = applyText(this.state.text, {
++                ScratchBlocks: ws.ScratchBlocks,
++                workspace: ws.workspace,
++                vm: this.props.vm,
++                toolboxXML: this.props.toolboxXML
++            });
++            this.lastAppliedText = this.state.text;
++            this.setState({
++                status: result.changed ? {kind: 'ok', message: 'Saved: your text is now blocks.'} : null,
++                errorLine: null
++            });
++            return true;
++        } catch (e) {
++            const message = e.line ? e.message : `Something went wrong: ${e.message}`;
++            this.setState({status: {kind: 'error', message}, errorLine: e.line || null});
++            if (!e.line) console.error(e); // eslint-disable-line no-console
++            return false;
++        }
++    }
++    handleRefresh () {
++        if (this.apply()) this.loadFromBlocks();
++    }
++    handleBlur () {
++        this.apply();
++    }
++    handleChange (e) {
++        this.setState({text: e.target.value});
++    }
++    handleScroll () {
++        if (this.gutterRef.current && this.textareaRef.current) {
++            this.gutterRef.current.scrollTop = this.textareaRef.current.scrollTop;
++        }
++    }
++    insertText (insert, selectionOffset) {
++        const ta = this.textareaRef.current;
++        if (!ta) return;
++        const {selectionStart, selectionEnd, value} = ta;
++        const next = value.slice(0, selectionStart) + insert + value.slice(selectionEnd);
++        const caret = selectionStart + (typeof selectionOffset === 'number' ? selectionOffset : insert.length);
++        this.setState({text: next}, () => {
++            ta.focus();
++            ta.selectionStart = ta.selectionEnd = caret;
++        });
++    }
++    handleKeyDown (e) {
++        const ta = e.target;
++        const {selectionStart, value} = ta;
++        const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1;
++        const currentIndent = /^[ \t]*/.exec(value.slice(lineStart))[0];
++        if (e.key === 'Tab') {
++            e.preventDefault();
++            this.insertText(INDENT);
++        } else if (e.key === 'Enter') {
++            e.preventDefault();
++            const before = value.slice(lineStart, selectionStart).trimEnd();
++            const after = value.slice(selectionStart, value.indexOf('\n', selectionStart) === -1 ?
++                value.length : value.indexOf('\n', selectionStart)).trim();
++            if (before.endsWith('{') && after.startsWith('}')) {
++                const inner = `\n${currentIndent}${INDENT}`;
++                this.insertText(`${inner}\n${currentIndent}`, inner.length);
++            } else {
++                this.insertText(`\n${currentIndent}${before.endsWith('{') ? INDENT : ''}`);
++            }
++        } else if (e.key === '}' && /^[ \t]+$/.test(value.slice(lineStart, selectionStart)) &&
++            value.slice(lineStart, selectionStart).length >= INDENT.length) {
++            e.preventDefault();
++            const newIndent = currentIndent.slice(0, -INDENT.length);
++            const next = `${value.slice(0, lineStart)}${newIndent}}${value.slice(selectionStart)}`;
++            const caret = lineStart + newIndent.length + 1;
++            this.setState({text: next}, () => {
++                ta.selectionStart = ta.selectionEnd = caret;
++            });
++        } else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
++            this.apply();
++        }
++    }
++    handleInsertCommand (item) {
++        const ta = this.textareaRef.current;
++        if (!ta) return;
++        const {value, selectionStart} = ta;
++        const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1;
++        const lineText = value.slice(lineStart, selectionStart);
++        const indent = /^[ \t]*$/.test(lineText) ? lineText : '';
++        let insert = item.insert.split('\n').join(`\n${indent}`);
++        if (!/^[ \t]*$/.test(lineText)) insert = `\n${insert}`;
++        const blank = insert.indexOf(`${INDENT}\n`);
++        this.insertText(insert, blank === -1 ? insert.length : blank + INDENT.length);
++    }
++    render () {
++        if (this.state.mode !== 'text') return null;
++        const {text, status, errorLine, groups, openGroup, showHelp, targetName} = this.state;
++        const lineCount = Math.max(1, text.split('\n').length);
++        const lines = [];
++        for (let i = 1; i <= lineCount; i++) {
++            lines.push(
++                <div
++                    key={i}
++                    className={classNames(styles.lineNumber, {[styles.lineNumberError]: i === errorLine})}
++                >{i}</div>
++            );
++        }
++        return (
++            <div className={styles.overlay}>
++                <div className={styles.toolStrip} />
++                <div className={styles.commands}>
++                    <div className={styles.commandsTitle}>{'Commands'}</div>
++                    <div className={styles.commandsHint}>{'Click one to add it to your code.'}</div>
++                    <div className={styles.commandsScroll}>
++                        {groups.map((group, i) => (
++                            <div
++                                key={group.category}
++                                className={styles.group}
++                            >
++                                <button
++                                    className={styles.groupHeader}
++                                    style={{borderLeftColor: group.color}}
++                                    onClick={() => this.setState({openGroup: openGroup === i ? -1 : i})} // eslint-disable-line react/jsx-no-bind
++                                >
++                                    <span
++                                        className={styles.groupDot}
++                                        style={{background: group.color}}
++                                    />
++                                    {group.category}
++                                    <span className={styles.groupCaret}>{openGroup === i ? '▾' : '▸'}</span>
++                                </button>
++                                {openGroup === i ? group.items.map(item => (
++                                    <button
++                                        key={item.insert}
++                                        className={classNames(styles.command, {[styles.commandHat]: item.isHat})}
++                                        style={{borderLeftColor: group.color}}
++                                        title={item.insert}
++                                        onMouseDown={e => e.preventDefault()} // eslint-disable-line react/jsx-no-bind
++                                        onClick={() => this.handleInsertCommand(item)} // eslint-disable-line react/jsx-no-bind
++                                    >{item.label}</button>
++                                )) : null}
++                            </div>
++                        ))}
++                    </div>
++                </div>
++                <div className={styles.editorColumn}>
++                    <div className={styles.editorHeader}>
++                        <span className={styles.editorTitle}>
++                            {'Text coding'}
++                            {targetName ? <span className={styles.editorTarget}>{` · ${targetName}`}</span> : null}
++                        </span>
++                        <span className={styles.editorButtons}>
++                            <button
++                                className={styles.headerButton}
++                                title="Turn the text into blocks and tidy it up"
++                                onClick={this.handleRefresh}
++                            >{'Save & tidy'}</button>
++                            <button
++                                className={classNames(styles.headerButton, {[styles.headerButtonActive]: showHelp})}
++                                onClick={this.handleToggleHelp}
++                            >{'Help'}</button>
++                        </span>
++                    </div>
++                    {showHelp ? (
++                        <div className={styles.help}>
++                            {HELP.map(([code, desc]) => (
++                                <div
++                                    key={code}
++                                    className={styles.helpRow}
++                                >
++                                    <code>{code}</code>
++                                    <span>{desc}</span>
++                                </div>
++                            ))}
++                            <div className={styles.helpRow}>
++                                <span>
++                                    {'Your text turns into blocks when you click away from the editor, ' +
++                                    'press Ctrl+S, or switch back to Blocks.'}
++                                </span>
++                            </div>
++                        </div>
++                    ) : null}
++                    <div className={styles.editorBody}>
++                        <div
++                            className={styles.gutter}
++                            ref={this.gutterRef}
++                        >{lines}</div>
++                        <textarea
++                            autoCapitalize="off"
++                            autoComplete="off"
++                            autoCorrect="off"
++                            className={styles.textarea}
++                            ref={this.textareaRef}
++                            spellCheck={false}
++                            value={text}
++                            wrap="off"
++                            onBlur={this.handleBlur}
++                            onChange={this.handleChange}
++                            onKeyDown={this.handleKeyDown}
++                            onScroll={this.handleScroll}
++                        />
++                    </div>
++                    {status ? (
++                        <div
++                            className={classNames(styles.status, {
++                                [styles.statusError]: status.kind === 'error',
++                                [styles.statusOk]: status.kind === 'ok'
++                            })}
++                        >{status.message}</div>
++                    ) : null}
++                </div>
++            </div>
++        );
++    }
++}
++
++TextCodeEditor.propTypes = {
++    toolboxXML: PropTypes.string,
++    vm: PropTypes.shape({
++        editingTarget: PropTypes.object,
++        on: PropTypes.func,
++        removeListener: PropTypes.func
++    }).isRequired
++};
++
++const mapStateToProps = state => ({
++    toolboxXML: state.scratchGui.toolbox.toolboxXML
++});
++
++export default connect(mapStateToProps)(TextCodeEditor);
+diff --git a/src/components/sl-text-code/text-code.css b/src/components/sl-text-code/text-code.css
+new file mode 100644
+index 0000000..1b71b99
+--- /dev/null
++++ b/src/components/sl-text-code/text-code.css
+@@ -0,0 +1,286 @@
++/* Stick Lab: Blocks/Text switch and Text coding editor (classic Stick Hubs style) */
++
++.toggle {
++    display: flex;
++    flex-direction: column;
++    width: 100%;
++    height: 100%;
++}
++
++.toggle-button {
++    flex: 1;
++    display: flex;
++    flex-direction: column;
++    align-items: center;
++    justify-content: center;
++    gap: 1px;
++    border: 0;
++    margin: 0;
++    padding: 0;
++    cursor: pointer;
++    background: transparent;
++    color: rgba(255, 255, 255, 0.8);
++    font-family: "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
++    font-size: 0.65rem;
++    font-weight: bold;
++    letter-spacing: 0.02em;
++}
++
++.toggle-button + .toggle-button {
++    border-top: 1px solid rgba(255, 255, 255, 0.35);
++}
++
++.toggle-button:hover {
++    color: #ffffff;
++    background: rgba(255, 255, 255, 0.12);
++}
++
++.toggle-active,
++.toggle-active:hover {
++    color: #1d4f91;
++    background: linear-gradient(180deg, #ffffff, #dce8f6);
++    box-shadow: inset 0 0 0 1px #8ea4c1;
++}
++
++/* ---- editor ---- */
++
++.overlay {
++    position: absolute;
++    inset: 0;
++    z-index: 45;
++    display: flex;
++    background: #f5f8fc;
++    border-top: 1px solid #c3d1e2;
++    font-family: Verdana, Tahoma, "Segoe UI", sans-serif;
++}
++
++.tool-strip {
++    width: calc(3.75rem + 1px);
++    flex: none;
++    background: linear-gradient(180deg, #f4f8fd, #dbe6f3);
++    border-right: 1px solid #a9bcd3;
++}
++
++.commands {
++    width: 15.5rem;
++    flex: none;
++    display: flex;
++    flex-direction: column;
++    background: #eef3fa;
++    border-right: 1px solid #a9bcd3;
++    min-height: 0;
++}
++
++.commands-title {
++    padding: 0.5rem 0.75rem 0;
++    font: bold 0.95rem "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
++    color: #1d4f91;
++}
++
++.commands-hint {
++    padding: 0 0.75rem 0.4rem;
++    font-size: 0.7rem;
++    color: #555;
++    border-bottom: 1px solid #c3d1e2;
++}
++
++.commands-scroll {
++    overflow-y: auto;
++    flex: 1;
++    padding: 0.25rem 0.4rem 0.5rem;
++}
++
++.group + .group {
++    margin-top: 2px;
++}
++
++.group-header {
++    width: 100%;
++    display: flex;
++    align-items: center;
++    gap: 0.4rem;
++    padding: 0.35rem 0.5rem;
++    border: 1px solid #c3d1e2;
++    border-left-width: 4px;
++    border-radius: 2px;
++    background: linear-gradient(180deg, #ffffff, #e6eef8);
++    color: #1d4f91;
++    font: bold 0.75rem Verdana, Tahoma, sans-serif;
++    text-align: left;
++    cursor: pointer;
++}
++
++.group-dot {
++    width: 0.6rem;
++    height: 0.6rem;
++    border-radius: 1px;
++    flex: none;
++}
++
++.group-caret {
++    margin-left: auto;
++    color: #5d82b0;
++}
++
++.command {
++    display: block;
++    width: 100%;
++    margin: 2px 0 0;
++    padding: 0.25rem 0.5rem;
++    border: 1px solid #d5dfeb;
++    border-left: 4px solid;
++    border-radius: 2px;
++    background: #ffffff;
++    color: #1f3550;
++    font: 0.72rem/1.35 Consolas, "Courier New", monospace;
++    text-align: left;
++    white-space: nowrap;
++    overflow: hidden;
++    text-overflow: ellipsis;
++    cursor: pointer;
++}
++
++.command:hover {
++    background: #e4edf8;
++}
++
++.command-hat {
++    font-weight: bold;
++}
++
++.editor-column {
++    flex: 1;
++    min-width: 0;
++    display: flex;
++    flex-direction: column;
++}
++
++.editor-header {
++    display: flex;
++    align-items: center;
++    padding: 0.35rem 0.6rem;
++    background: linear-gradient(180deg, #f4f8fd, #d9e5f3);
++    border-bottom: 1px solid #a9bcd3;
++}
++
++.editor-title {
++    font: bold 0.85rem "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
++    color: #1d4f91;
++}
++
++.editor-target {
++    font-weight: normal;
++    color: #555;
++}
++
++.editor-buttons {
++    margin-left: auto;
++    display: flex;
++    gap: 0.35rem;
++}
++
++.header-button {
++    font: bold 0.72rem Verdana, Tahoma, sans-serif;
++    color: #1d4f91;
++    padding: 0.25rem 0.6rem;
++    border: 1px solid #8ea4c1;
++    border-radius: 3px;
++    background: linear-gradient(180deg, #ffffff, #e2eaf4);
++    cursor: pointer;
++}
++
++.header-button:hover,
++.header-button-active {
++    background: linear-gradient(180deg, #ffffff, #d3e1f1);
++    border-color: #5d82b0;
++}
++
++.help {
++    padding: 0.5rem 0.75rem;
++    background: #fffbe6;
++    border-bottom: 1px solid #e6d58a;
++    font-size: 0.72rem;
++    color: #333;
++    max-height: 40%;
++    overflow-y: auto;
++}
++
++.help-row {
++    display: flex;
++    gap: 0.6rem;
++    padding: 0.15rem 0;
++}
++
++.help-row code {
++    flex: none;
++    width: 14rem;
++    font-family: Consolas, "Courier New", monospace;
++    color: #1d4f91;
++}
++
++.editor-body {
++    flex: 1;
++    min-height: 0;
++    display: flex;
++    background: #ffffff;
++}
++
++.gutter {
++    flex: none;
++    width: 2.75rem;
++    overflow: hidden;
++    padding: 0.5rem 0;
++    background: #f0f4f9;
++    border-right: 1px solid #d5dfeb;
++    color: #8a9bb3;
++    font: 0.8rem/1.5 Consolas, "Courier New", monospace;
++    text-align: right;
++    user-select: none;
++}
++
++.line-number {
++    padding-right: 0.5rem;
++    height: 1.2rem;
++}
++
++.line-number-error {
++    background: #c62828;
++    color: #ffffff;
++}
++
++.textarea {
++    flex: 1;
++    min-width: 0;
++    resize: none;
++    border: 0;
++    outline: none;
++    margin: 0;
++    padding: 0.5rem 0.75rem;
++    font: 0.8rem/1.5 Consolas, "Courier New", monospace;
++    color: #1f3550;
++    background: #ffffff;
++    tab-size: 4;
++    white-space: pre;
++    overflow: auto;
++}
++
++.status {
++    padding: 0.35rem 0.75rem;
++    font-size: 0.75rem;
++    color: #1d4f91;
++    background: #e4edf8;
++    border-top: 1px solid #c3d1e2;
++}
++
++.status-ok {
++    color: #1e6b2e;
++    background: #e3f4e5;
++    border-top-color: #9fd3a7;
++}
++
++.status-error {
++    color: #ffffff;
++    background: #c62828;
++    border-top-color: #8e1b1b;
++    font-weight: bold;
++}
+diff --git a/src/containers/blocks.jsx b/src/containers/blocks.jsx
+index 1a93708..2b08868 100644
+--- a/src/containers/blocks.jsx
++++ b/src/containers/blocks.jsx
+@@ -44,6 +44,7 @@ import AddonHooks from '../addons/hooks.js';
+ import LoadScratchBlocksHOC from '../lib/tw-load-scratch-blocks-hoc.jsx';
+ import {findTopBlock} from '../lib/backpack/code-payload.js';
+ import {gentlyRequestPersistentStorage} from '../lib/tw-persistent-storage.js';
++import {setWorkspace as slSetWorkspace} from '../lib/sl-workspace-registry.js';
+ 
+ // TW: Strings we add to scratch-blocks are localized here
+ const messages = defineMessages({
+@@ -166,6 +167,7 @@ class Blocks extends React.Component {
+         );
+         this.workspace = this.ScratchBlocks.inject(this.blocks, workspaceConfig);
+         AddonHooks.blocklyWorkspace = this.workspace;
++        slSetWorkspace(this.workspace, this.ScratchBlocks);
+ 
+         // Register buttons under new callback keys for creating variables,
+         // lists, and procedures from extensions.
+@@ -287,6 +289,7 @@ class Blocks extends React.Component {
+     componentWillUnmount () {
+         this.detachVM();
+         this.unmounted = true;
++        slSetWorkspace(null);
+         this.workspace.dispose();
+         clearTimeout(this.toolboxUpdateTimeout);
+ 
 diff --git a/src/containers/sb3-downloader.jsx b/src/containers/sb3-downloader.jsx
 index 3f4773c..882a839 100644
 --- a/src/containers/sb3-downloader.jsx
@@ -414,6 +1337,278 @@ index 01f29db..a866883 100644
              if (!matches) return '';
              return matches[1].substring(0, 100); // truncate project title to max 100 chars
          }
+diff --git a/src/lib/sl-classic-ui.js b/src/lib/sl-classic-ui.js
+new file mode 100644
+index 0000000..1a10d4b
+--- /dev/null
++++ b/src/lib/sl-classic-ui.js
+@@ -0,0 +1,266 @@
++// Stick Lab: classic Stick Hubs restyle of the whole editor.
++// Same layout as Scratch; glossy blue headers and buttons, square-ish panels, thin blue-grey borders.
++// Component class names look like "gui_tab_x1y2z", so [class*="file_class_"] targets them.
++
++const css = `
++:root {
++    --sl-line: #a9bcd3;
++    --sl-line-soft: #c3d1e2;
++    --sl-blue: #1d4f91;
++    --sl-blue-mid: #2a6ab8;
++    --sl-head: linear-gradient(180deg, #f7faff 0%, #dbe6f3 100%);
++    --sl-button: linear-gradient(180deg, #ffffff 0%, #e2eaf4 100%);
++    --sl-button-hover: linear-gradient(180deg, #ffffff 0%, #d3e1f1 100%);
++    --sl-blue-button: linear-gradient(180deg, #5a9de2 0%, #2a6ab8 55%, #1d5fa8 100%);
++}
++
++/* page background */
++[class*="gui_body-wrapper_"], [class*="gui_flex-wrapper_"] {
++    background: #d9e3ef !important;
++}
++
++/* ---- Script / Costumes / Sounds tabs ---- */
++[class*="gui_tab-list_"] {
++    gap: 2px !important;
++}
++[class*="gui_tab_"] {
++    background: var(--sl-head) !important;
++    border: 1px solid var(--sl-line) !important;
++    border-bottom: 0 !important;
++    border-radius: 4px 4px 0 0 !important;
++    color: var(--sl-blue) !important;
++    font-weight: bold !important;
++    margin: 0 !important;
++}
++[class*="gui_tab_"]:hover {
++    background: linear-gradient(180deg, #ffffff 0%, #e6eef8 100%) !important;
++}
++[class*="gui_tab_"][class*="gui_is-selected_"] {
++    background: #ffffff !important;
++    color: #000000 !important;
++    box-shadow: inset 0 3px 0 var(--sl-blue-mid) !important;
++}
++[class*="gui_tab_"] img {
++    filter: hue-rotate(0deg) saturate(1.1);
++}
++
++/* ---- main panels ---- */
++[class*="gui_tab-panel_"],
++[class*="gui_blocks-wrapper_"],
++[class*="backpack_backpack-container_"] {
++    border-radius: 0 !important;
++}
++[class*="gui_blocks-wrapper_"] {
++    border: 1px solid var(--sl-line) !important;
++    border-radius: 0 3px 3px 3px !important;
++    overflow: hidden;
++}
++.injectionDiv {
++    border-radius: 0 !important;
++}
++
++/* block categories: square colour chips, classic selected row */
++.scratchCategoryItemBubble {
++    border-radius: 2px !important;
++}
++.scratchCategoryMenu {
++    background: linear-gradient(90deg, #f7faff, #e9f0f9) !important;
++    border-right: 1px solid var(--sl-line-soft) !important;
++}
++.scratchCategoryMenuItem.categorySelected {
++    background: #dce7f5 !important;
++    box-shadow: inset 3px 0 0 var(--sl-blue-mid);
++}
++.scratchCategoryMenuItemLabel {
++    color: var(--sl-blue) !important;
++}
++.blocklyFlyoutBackground {
++    fill: #eef3fa !important;
++}
++
++/* ---- stage header buttons ---- */
++[class*="stage-header_stage-header-wrapper_"] {
++    background: transparent !important;
++}
++[class*="stage-header_stage-button_"] {
++    background: var(--sl-button) !important;
++    border: 1px solid #8ea4c1 !important;
++    border-radius: 3px !important;
++}
++[class*="stage-header_stage-button_"]:hover {
++    background: var(--sl-button-hover) !important;
++}
++[class*="stage-header_stage-size-toggle-group_"] > * {
++    border-color: #8ea4c1 !important;
++}
++[class*="toggle-buttons_button_"] {
++    background: var(--sl-button) !important;
++    border-color: #8ea4c1 !important;
++}
++[class*="toggle-buttons_button_"][aria-pressed="true"] {
++    background: #c9dbf0 !important;
++}
++[class*="toggle-buttons_row_"] > :first-child {
++    border-radius: 3px 0 0 3px !important;
++}
++[class*="toggle-buttons_row_"] > :last-child {
++    border-radius: 0 3px 3px 0 !important;
++}
++
++/* stage */
++[class*="stage_stage_"] {
++    border: 1px solid var(--sl-line) !important;
++    border-radius: 3px !important;
++}
++
++/* ---- sprite info ---- */
++[class*="sprite-info_sprite-info_"] {
++    border: 1px solid var(--sl-line) !important;
++    border-radius: 3px 3px 0 0 !important;
++    background: linear-gradient(180deg, #ffffff 0%, #f1f5fb 100%) !important;
++    box-shadow: none !important;
++}
++[class*="sprite-info_label_"] {
++    color: var(--sl-blue) !important;
++    font-weight: bold;
++}
++[class*="input_input-form_"] {
++    border-radius: 3px !important;
++    border: 1px solid #8ea4c1 !important;
++    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
++}
++[class*="input_input-form_"]:focus {
++    border-color: var(--sl-blue-mid) !important;
++    box-shadow: 0 0 0 2px rgba(42, 106, 184, 0.25) !important;
++}
++[class*="sprite-info_icon-wrapper_"], [class*="sprite-info_radio-wrapper_"] > * {
++    border-color: #8ea4c1 !important;
++}
++
++/* ---- sprite list ---- */
++[class*="sprite-selector_sprite-selector_"] {
++    border: 1px solid var(--sl-line) !important;
++    border-top: 0 !important;
++    border-radius: 0 0 3px 3px !important;
++    background: #eef3fa !important;
++}
++[class*="sprite-selector-item_sprite-selector-item_"] {
++    border-radius: 3px !important;
++    border: 1px solid var(--sl-line-soft) !important;
++    background: linear-gradient(180deg, #ffffff 0%, #f1f5fb 100%) !important;
++    box-shadow: none !important;
++}
++[class*="sprite-selector-item_sprite-selector-item_"]:hover {
++    border-color: #5d82b0 !important;
++}
++[class*="sprite-selector-item_is-selected_"] {
++    border: 2px solid var(--sl-blue-mid) !important;
++    box-shadow: 0 0 0 2px rgba(42, 106, 184, 0.2) !important;
++}
++[class*="sprite-selector-item_sprite-info_"] {
++    border-radius: 0 0 2px 2px !important;
++}
++[class*="sprite-selector-item_is-selected_"] [class*="sprite-selector-item_sprite-info_"] {
++    background: var(--sl-blue-button) !important;
++}
++[class*="sprite-selector-item_delete-button_"] > * {
++    border-radius: 3px !important;
++}
++
++/* ---- stage selector ---- */
++[class*="stage-selector_stage-selector_"] {
++    border: 1px solid var(--sl-line) !important;
++    border-radius: 3px !important;
++    background: #eef3fa !important;
++}
++[class*="stage-selector_header_"] {
++    background: var(--sl-head) !important;
++    border-bottom: 1px solid var(--sl-line) !important;
++    border-radius: 3px 3px 0 0 !important;
++}
++[class*="stage-selector_header-title_"] {
++    color: var(--sl-blue) !important;
++    font-weight: bold;
++}
++[class*="stage-selector_is-selected_"] {
++    border: 2px solid var(--sl-blue-mid) !important;
++}
++
++/* ---- round add buttons become classic rounded squares ---- */
++[class*="action-menu_button_"] {
++    border-radius: 8px !important;
++    background: var(--sl-blue-button) !important;
++    box-shadow: 0 2px 4px rgba(29, 79, 145, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35) !important;
++}
++[class*="action-menu_more-buttons_"] {
++    border-radius: 8px 8px 0 0 !important;
++    background: #2a6ab8 !important;
++}
++[class*="action-menu_more-buttons_"] [class*="action-menu_button_"] {
++    box-shadow: none !important;
++}
++
++/* ---- backpack ---- */
++[class*="backpack_backpack-header_"] {
++    background: var(--sl-head) !important;
++    border: 1px solid var(--sl-line) !important;
++    border-radius: 3px 3px 0 0 !important;
++    color: var(--sl-blue) !important;
++    font-weight: bold;
++}
++[class*="backpack_backpack-list_"] {
++    border: 1px solid var(--sl-line) !important;
++    border-top: 0 !important;
++}
++
++/* ---- costume and sound editors ---- */
++[class*="asset-panel_wrapper_"], [class*="selector_wrapper_"] {
++    border-color: var(--sl-line) !important;
++}
++[class*="selector_list-area_"] {
++    background: #eef3fa !important;
++}
++[class*="asset-panel_detail-area_"] {
++    border-left: 1px solid var(--sl-line) !important;
++}
++
++/* ---- buttons in menus and modals ---- */
++[class*="modal_header_"] {
++    background: var(--sl-blue-button) !important;
++}
++[class*="library_library-scroll-grid_"] {
++    background: #eef3fa !important;
++}
++[class*="library-item_library-item_"] {
++    border-radius: 3px !important;
++    border: 1px solid var(--sl-line-soft) !important;
++}
++[class*="library-item_library-item_"]:hover {
++    border-color: #5d82b0 !important;
++}
++
++/* zoom buttons in the script area */
++.blocklyZoom > image {
++    opacity: 0.85;
++}
++
++/* green flag / stop area */
++[class*="controls_controls-container_"] img {
++    border-radius: 3px;
++}
++`;
++
++const install = () => {
++    if (typeof document === 'undefined' || document.getElementById('stick-lab-classic-ui')) return;
++    const style = document.createElement('style');
++    style.id = 'stick-lab-classic-ui';
++    style.textContent = css;
++    // Added at the end of <head> so it comes after the editor's own styles.
++    const add = () => document.head.appendChild(style);
++    if (document.head) add();
++    else document.addEventListener('DOMContentLoaded', add);
++};
++
++install();
++
++export default install;
 diff --git a/src/lib/sl-format.js b/src/lib/sl-format.js
 new file mode 100644
 index 0000000..e6b14ca
@@ -533,6 +1728,1424 @@ index 0000000..e6b14ca
 +    sb3BlobToStickLabBlob,
 +    installStickLabLoader
 +};
+diff --git a/src/lib/sl-text-code/aliases.js b/src/lib/sl-text-code/aliases.js
+new file mode 100644
+index 0000000..96aefa7
+--- /dev/null
++++ b/src/lib/sl-text-code/aliases.js
+@@ -0,0 +1,164 @@
++// Friendly Text coding names for common blocks. Any other block can still be written by its
++// block id, for example sensing_dayssince2000().
++const ALIASES = {
++    // Motion
++    move: 'motion_movesteps',
++    turn_right: 'motion_turnright',
++    turn_left: 'motion_turnleft',
++    go_to: 'motion_goto',
++    go_to_xy: 'motion_gotoxy',
++    glide_to: 'motion_glideto',
++    glide_to_xy: 'motion_glidesecstoxy',
++    point_in_direction: 'motion_pointindirection',
++    point_towards: 'motion_pointtowards',
++    change_x: 'motion_changexby',
++    set_x: 'motion_setx',
++    change_y: 'motion_changeyby',
++    set_y: 'motion_sety',
++    bounce_on_edge: 'motion_ifonedgebounce',
++    set_rotation_style: 'motion_setrotationstyle',
++    x_position: 'motion_xposition',
++    y_position: 'motion_yposition',
++    direction: 'motion_direction',
++
++    // Looks
++    say_for: 'looks_sayforsecs',
++    say: 'looks_say',
++    think_for: 'looks_thinkforsecs',
++    think: 'looks_think',
++    switch_costume: 'looks_switchcostumeto',
++    next_costume: 'looks_nextcostume',
++    switch_backdrop: 'looks_switchbackdropto',
++    switch_backdrop_and_wait: 'looks_switchbackdroptoandwait',
++    next_backdrop: 'looks_nextbackdrop',
++    change_size: 'looks_changesizeby',
++    set_size: 'looks_setsizeto',
++    change_effect: 'looks_changeeffectby',
++    set_effect: 'looks_seteffectto',
++    clear_effects: 'looks_cleargraphiceffects',
++    show: 'looks_show',
++    hide: 'looks_hide',
++    go_to_layer: 'looks_gotofrontback',
++    change_layer: 'looks_goforwardbackwardlayers',
++    costume: 'looks_costumenumbername',
++    backdrop: 'looks_backdropnumbername',
++    size: 'looks_size',
++
++    // Sound
++    play_sound_until_done: 'sound_playuntildone',
++    play_sound: 'sound_play',
++    stop_all_sounds: 'sound_stopallsounds',
++    change_sound_effect: 'sound_changeeffectby',
++    set_sound_effect: 'sound_seteffectto',
++    clear_sound_effects: 'sound_cleareffects',
++    change_volume: 'sound_changevolumeby',
++    set_volume: 'sound_setvolumeto',
++    volume: 'sound_volume',
++
++    // Events
++    when_flag_clicked: 'event_whenflagclicked',
++    when_key_pressed: 'event_whenkeypressed',
++    when_this_sprite_clicked: 'event_whenthisspriteclicked',
++    when_stage_clicked: 'event_whenstageclicked',
++    when_backdrop_switches_to: 'event_whenbackdropswitchesto',
++    when_greater_than: 'event_whengreaterthan',
++    when_i_receive: 'event_whenbroadcastreceived',
++    broadcast: 'event_broadcast',
++    broadcast_and_wait: 'event_broadcastandwait',
++
++    // Control
++    wait: 'control_wait',
++    repeat: 'control_repeat',
++    forever: 'control_forever',
++    if: 'control_if',
++    if_else: 'control_if_else',
++    wait_until: 'control_wait_until',
++    repeat_until: 'control_repeat_until',
++    while: 'control_while',
++    for_each: 'control_for_each',
++    stop: 'control_stop',
++    when_i_start_as_clone: 'control_start_as_clone',
++    create_clone: 'control_create_clone_of',
++    delete_this_clone: 'control_delete_this_clone',
++
++    // Sensing
++    touching: 'sensing_touchingobject',
++    touching_color: 'sensing_touchingcolor',
++    color_touching_color: 'sensing_coloristouchingcolor',
++    distance_to: 'sensing_distanceto',
++    ask: 'sensing_askandwait',
++    answer: 'sensing_answer',
++    key_pressed: 'sensing_keypressed',
++    mouse_down: 'sensing_mousedown',
++    mouse_x: 'sensing_mousex',
++    mouse_y: 'sensing_mousey',
++    set_drag_mode: 'sensing_setdragmode',
++    loudness: 'sensing_loudness',
++    timer: 'sensing_timer',
++    reset_timer: 'sensing_resettimer',
++    of: 'sensing_of',
++    current: 'sensing_current',
++    days_since_2000: 'sensing_dayssince2000',
++    username: 'sensing_username',
++
++    // Operators (+ - * / mod > < == and or not are written as symbols)
++    random: 'operator_random',
++    join: 'operator_join',
++    letter_of: 'operator_letter_of',
++    length_of: 'operator_length',
++    contains: 'operator_contains',
++    round: 'operator_round',
++    math: 'operator_mathop',
++
++    // Variables and lists ($name is a variable, @name is a list)
++    set_var: 'data_setvariableto',
++    change_var: 'data_changevariableby',
++    show_var: 'data_showvariable',
++    hide_var: 'data_hidevariable',
++    add_to_list: 'data_addtolist',
++    delete_of_list: 'data_deleteoflist',
++    delete_all_of_list: 'data_deletealloflist',
++    insert_at: 'data_insertatlist',
++    replace_item: 'data_replaceitemoflist',
++    item_of: 'data_itemoflist',
++    item_number_of: 'data_itemnumoflist',
++    length_of_list: 'data_lengthoflist',
++    list_contains: 'data_listcontainsitem',
++    show_list: 'data_showlist',
++    hide_list: 'data_hidelist'
++};
++
++const OPCODE_TO_ALIAS = {};
++for (const [alias, opcode] of Object.entries(ALIASES)) {
++    if (!OPCODE_TO_ALIAS[opcode]) OPCODE_TO_ALIAS[opcode] = alias;
++}
++
++// Blocks written as symbols. prec: higher binds tighter.
++const BINARY_OPERATORS = {
++    operator_or: {symbol: 'or', prec: 1, inputs: ['OPERAND1', 'OPERAND2']},
++    operator_and: {symbol: 'and', prec: 2, inputs: ['OPERAND1', 'OPERAND2']},
++    operator_gt: {symbol: '>', prec: 4, inputs: ['OPERAND1', 'OPERAND2']},
++    operator_lt: {symbol: '<', prec: 4, inputs: ['OPERAND1', 'OPERAND2']},
++    operator_equals: {symbol: '==', prec: 4, inputs: ['OPERAND1', 'OPERAND2']},
++    operator_add: {symbol: '+', prec: 5, inputs: ['NUM1', 'NUM2']},
++    operator_subtract: {symbol: '-', prec: 5, inputs: ['NUM1', 'NUM2']},
++    operator_multiply: {symbol: '*', prec: 6, inputs: ['NUM1', 'NUM2']},
++    operator_divide: {symbol: '/', prec: 6, inputs: ['NUM1', 'NUM2']},
++    operator_mod: {symbol: 'mod', prec: 6, inputs: ['NUM1', 'NUM2']}
++};
++const NOT_PREC = 3;
++const SYMBOL_TO_OPERATOR = {};
++for (const [opcode, info] of Object.entries(BINARY_OPERATORS)) {
++    SYMBOL_TO_OPERATOR[info.symbol] = opcode;
++}
++
++const KEYWORDS = new Set(['define', 'warp', 'stack', 'call', 'else', 'and', 'or', 'not', 'mod', 'locked_script']);
++
++export {
++    ALIASES,
++    OPCODE_TO_ALIAS,
++    BINARY_OPERATORS,
++    NOT_PREC,
++    SYMBOL_TO_OPERATOR,
++    KEYWORDS
++};
+diff --git a/src/lib/sl-text-code/apply.js b/src/lib/sl-text-code/apply.js
+new file mode 100644
+index 0000000..384a465
+--- /dev/null
++++ b/src/lib/sl-text-code/apply.js
+@@ -0,0 +1,637 @@
++// Stick Lab Text coding -> blocks
++import {ALIASES, BINARY_OPERATORS} from './aliases';
++import {parse, scriptKey, TextCodeError} from './parser';
++import {workspaceToText, describeBlock, variableTypeOf, isVariableField} from './printer';
++
++const STOP_OTHER_OPTIONS = new Set(['other scripts in sprite', 'other scripts in stage']);
++
++const createEl = (tag, attrs, text) => {
++    const el = document.createElement(tag);
++    if (attrs) {
++        for (const [k, v] of Object.entries(attrs)) {
++            if (v !== null && typeof v !== 'undefined') el.setAttribute(k, v);
++        }
++    }
++    if (typeof text !== 'undefined') el.textContent = text;
++    return el;
++};
++
++// ---- information about blocks -------------------------------------------------------------
++
++const blockInfoCache = new Map();
++const getBlockInfo = (ScratchBlocks, opcode) => {
++    if (blockInfoCache.has(opcode)) return blockInfoCache.get(opcode);
++    let info = null;
++    if (ScratchBlocks.Blocks[opcode] && !opcode.startsWith('procedures_') && !opcode.startsWith('argument_')) {
++        const ws = new ScratchBlocks.Workspace();
++        try {
++            const block = ws.newBlock(opcode);
++            const {args, statements} = describeBlock(block, ScratchBlocks);
++            info = {
++                opcode,
++                args: args.map(arg => {
++                    if (arg.kind === 'field') {
++                        return {
++                            kind: 'field',
++                            name: arg.name,
++                            variableType: isVariableField(arg.field, ScratchBlocks) ? variableTypeOf(arg.field) : null
++                        };
++                    }
++                    const check = arg.input.connection && arg.input.connection.check_;
++                    return {kind: 'value', name: arg.name, boolean: !!(check && check.indexOf('Boolean') !== -1)};
++                }),
++                statements: statements.map(s => s.name),
++                isReporter: !!block.outputConnection,
++                isHat: !block.outputConnection && !block.previousConnection,
++                isStatement: !!block.previousConnection
++            };
++        } catch (e) {
++            info = null;
++        } finally {
++            ws.dispose();
++        }
++    }
++    blockInfoCache.set(opcode, info);
++    return info;
++};
++
++const describeArgs = info => info.args.map(a => a.name.toLowerCase()).join(', ');
++
++// ---- default inputs from the block palette -------------------------------------------------
++
++const parseToolbox = toolboxXML => {
++    const map = new Map();
++    if (!toolboxXML) return map;
++    const doc = new DOMParser().parseFromString(toolboxXML, 'text/xml');
++    const walk = el => {
++        for (const child of Array.from(el.children)) {
++            if (child.tagName.toLowerCase() === 'block') {
++                const type = child.getAttribute('type');
++                if (type && !map.has(type)) map.set(type, child);
++            } else {
++                walk(child);
++            }
++        }
++    };
++    walk(doc.documentElement);
++    return map;
++};
++
++const importIntoDocument = el => {
++    // Convert an XML-document element into an HTML-document element tree Blockly accepts.
++    const out = document.createElement(el.tagName);
++    for (const attr of Array.from(el.attributes)) out.setAttribute(attr.name, attr.value);
++    for (const child of Array.from(el.childNodes)) {
++        if (child.nodeType === 1) out.appendChild(importIntoDocument(child));
++        else if (child.nodeType === 3) out.appendChild(document.createTextNode(child.nodeValue));
++    }
++    return out;
++};
++
++// ---- build Blockly XML from the syntax tree -------------------------------------------------
++
++class Builder {
++    constructor ({ScratchBlocks, workspace, isStage, toolbox, procedures}) {
++        this.ScratchBlocks = ScratchBlocks;
++        this.workspace = workspace;
++        this.isStage = isStage;
++        this.toolbox = toolbox;
++        this.procedures = procedures;
++        this.newVariables = new Map(); // key -> {name, type, id}
++        this.params = null;
++    }
++
++    error (message, node) {
++        return new TextCodeError(message, node && node.line);
++    }
++
++    resolve (name, node) {
++        const opcode = ALIASES[name] || name;
++        const info = getBlockInfo(this.ScratchBlocks, opcode);
++        if (!info) {
++            if (name === 'else') throw this.error('"else" must come right after the } of an if', node);
++            throw this.error(`Unknown command "${name}". Check the spelling, or pick it from the Commands list`, node);
++        }
++        return info;
++    }
++
++    variableId (name, type) {
++        const existing = this.workspace.getVariable(name, type);
++        if (existing) return existing.getId();
++        const key = `${type}:${name}`;
++        if (!this.newVariables.has(key)) {
++            this.newVariables.set(key, {name, type, id: this.ScratchBlocks.utils.genUid()});
++        }
++        return this.newVariables.get(key).id;
++    }
++
++    defaultShadow (opcode, inputName) {
++        const blockEl = this.toolbox.get(opcode);
++        if (!blockEl) return null;
++        for (const child of Array.from(blockEl.children)) {
++            if (child.tagName.toLowerCase() === 'value' && child.getAttribute('name') === inputName) {
++                const shadow = Array.from(child.children).find(c => c.tagName.toLowerCase() === 'shadow');
++                return shadow ? importIntoDocument(shadow) : null;
++            }
++        }
++        return null;
++    }
++
++    fieldEl (spec, node, opcode) {
++        if (spec.variableType === '' || spec.variableType === 'list') {
++            const want = spec.variableType === 'list' ? 'list' : 'variable';
++            if (node.type !== want) {
++                const example = want === 'list' ? '@my_list' : '$score';
++                throw this.error(`${opcode} needs a ${want} here, written like ${example}`, node);
++            }
++            return createEl('field', {
++                name: spec.name,
++                id: this.variableId(node.name, spec.variableType),
++                variabletype: spec.variableType
++            }, node.name);
++        }
++        if (node.type !== 'literal') {
++            throw this.error(`This part of ${opcode} must be written in quotes, like "${spec.name.toLowerCase()}"`, node);
++        }
++        if (spec.variableType === 'broadcast_msg') {
++            return createEl('field', {
++                name: spec.name,
++                id: this.variableId(node.value, 'broadcast_msg'),
++                variabletype: 'broadcast_msg'
++            }, node.value);
++        }
++        return createEl('field', {name: spec.name}, node.value);
++    }
++
++    setShadowValue (shadow, value) {
++        let field = Array.from(shadow.children).find(c => c.tagName.toLowerCase() === 'field');
++        if (!field) {
++            // Menus like touching(...) have no default in the palette; find the menu's field name.
++            const info = getBlockInfo(this.ScratchBlocks, shadow.getAttribute('type'));
++            const spec = info && info.args.find(a => a.kind === 'field');
++            if (!spec) return;
++            field = createEl('field', {name: spec.name});
++            if (spec.variableType !== null && typeof spec.variableType !== 'undefined') {
++                field.setAttribute('variabletype', spec.variableType);
++            }
++            shadow.appendChild(field);
++        }
++        const isBroadcast = field.getAttribute('variabletype') === 'broadcast_msg' ||
++            shadow.getAttribute('type') === 'event_broadcast_menu';
++        if (isBroadcast) {
++            field.setAttribute('id', this.variableId(value, 'broadcast_msg'));
++            field.setAttribute('variabletype', 'broadcast_msg');
++        }
++        field.textContent = value;
++    }
++
++    valueEl (inputName, isBoolean, node, opcode) {
++        const value = createEl('value', {name: inputName});
++        let shadow = isBoolean ? null : this.defaultShadow(opcode, inputName);
++        if (node.type === 'empty') {
++            if (!shadow) return null;
++            value.appendChild(shadow);
++            return value;
++        }
++        if (node.type === 'literal') {
++            if (isBoolean) {
++                throw this.error(`${opcode} needs a true/false block here, like touching("_mouse_") or $x > 10`, node);
++            }
++            if (!shadow) {
++                shadow = node.isNumber ?
++                    createEl('shadow', {type: 'math_number'}) :
++                    createEl('shadow', {type: 'text'});
++                shadow.appendChild(createEl('field', {name: node.isNumber ? 'NUM' : 'TEXT'}));
++            }
++            this.setShadowValue(shadow, node.value);
++            value.appendChild(shadow);
++            return value;
++        }
++        if (shadow) value.appendChild(shadow);
++        value.appendChild(this.exprEl(node));
++        return value;
++    }
++
++    exprEl (node) {
++        switch (node.type) {
++        case 'binary': {
++            const op = BINARY_OPERATORS[node.opcode];
++            const isLogic = node.opcode === 'operator_and' || node.opcode === 'operator_or';
++            const block = createEl('block', {type: node.opcode});
++            [node.left, node.right].forEach((child, i) => {
++                const v = this.valueEl(op.inputs[i], isLogic, child, node.opcode);
++                if (v) block.appendChild(v);
++            });
++            return block;
++        }
++        case 'not': {
++            const block = createEl('block', {type: 'operator_not'});
++            const v = this.valueEl('OPERAND', true, node.operand, 'not');
++            if (v) block.appendChild(v);
++            return block;
++        }
++        case 'variable': {
++            const block = createEl('block', {type: 'data_variable'});
++            block.appendChild(createEl('field', {
++                name: 'VARIABLE', id: this.variableId(node.name, ''), variabletype: ''
++            }, node.name));
++            return block;
++        }
++        case 'list': {
++            const block = createEl('block', {type: 'data_listcontents'});
++            block.appendChild(createEl('field', {
++                name: 'LIST', id: this.variableId(node.name, 'list'), variabletype: 'list'
++            }, node.name));
++            return block;
++        }
++        case 'argument': {
++            const isBool = this.params && this.params.get(node.name) === 'b';
++            if (this.params && !this.params.has(node.name)) {
++                throw this.error(`%${node.name} isn't an input of this custom block`, node);
++            }
++            const block = createEl('block', {
++                type: isBool ? 'argument_reporter_boolean' : 'argument_reporter_string_number'
++            });
++            block.appendChild(createEl('field', {name: 'VALUE'}, node.name));
++            return block;
++        }
++        case 'call': {
++            const info = this.resolve(node.name, node);
++            if (!info.isReporter) {
++                throw this.error(`"${node.name}" is a command, so it can't be used as a value`, node);
++            }
++            return this.blockWithArgs(info, node.name, node.args, node);
++        }
++        case 'literal':
++        case 'empty':
++            throw this.error('A value can only go inside a block here', node);
++        default:
++            throw this.error('Unexpected code', node);
++        }
++    }
++
++    blockWithArgs (info, name, args, node) {
++        if (args.length !== info.args.length) {
++            const want = info.args.length;
++            throw this.error(
++                want ?
++                    `${name} needs ${want} value${want === 1 ? '' : 's'}: ${name}(${describeArgs(info)})` :
++                    `${name} doesn't take any values: just write ${name}`,
++                node
++            );
++        }
++        const block = createEl('block', {type: info.opcode});
++        info.args.forEach((spec, i) => {
++            if (spec.kind === 'field') {
++                block.appendChild(this.fieldEl(spec, args[i], name));
++            } else {
++                const v = this.valueEl(spec.name, spec.boolean, args[i], info.opcode);
++                if (v) block.appendChild(v);
++            }
++        });
++        if (info.opcode === 'control_stop') {
++            const option = args[0] && args[0].type === 'literal' ? args[0].value : '';
++            block.insertBefore(createEl('mutation', {
++                hasnext: STOP_OTHER_OPTIONS.has(option) ? 'true' : 'false'
++            }), block.firstChild);
++        }
++        return block;
++    }
++
++    commandEl (node) {
++        if (node.type === 'callProcedure') return this.procedureCallEl(node);
++        let name = node.name;
++        if (name === 'if' && node.bodies.length === 2) name = 'if_else';
++        const info = this.resolve(name, node);
++        if (info.isHat) {
++            throw this.error(`"${node.name}" starts a script, so it can't go inside another script`, node);
++        }
++        if (!info.isStatement) {
++            throw this.error(`"${node.name}" is a value, not a command. Use it inside another block, like say(${node.name})`, node);
++        }
++        if (node.bodies.length > info.statements.length) {
++            throw this.error(
++                info.statements.length ? `${name} has only ${info.statements.length} { } part` :
++                    `${name} doesn't take a { } part`,
++                node
++            );
++        }
++        if (info.statements.length && !node.bodies.length) {
++            throw this.error(`${name} needs a { } part with commands inside`, node);
++        }
++        const block = this.blockWithArgs(info, node.name, node.args, node);
++        node.bodies.forEach((body, i) => {
++            const first = this.chainEl(body);
++            if (first) {
++                const statement = createEl('statement', {name: info.statements[i]});
++                statement.appendChild(first);
++                block.appendChild(statement);
++            }
++        });
++        return block;
++    }
++
++    procedureCallEl (node) {
++        const proc = this.procedures.get(node.proccode);
++        if (!proc) {
++            throw this.error(`There's no custom block called "${node.proccode}". Make it with define "${node.proccode}" (...) { }`, node);
++        }
++        if (node.args.length !== proc.ids.length) {
++            throw this.error(`"${node.proccode}" needs ${proc.ids.length} value${proc.ids.length === 1 ? '' : 's'}`, node);
++        }
++        const block = createEl('block', {type: 'procedures_call'});
++        block.appendChild(createEl('mutation', {
++            proccode: node.proccode,
++            argumentids: JSON.stringify(proc.ids),
++            warp: proc.warp ? 'true' : 'false'
++        }));
++        proc.ids.forEach((id, i) => {
++            const arg = node.args[i];
++            const isBool = proc.types[i] === 'b';
++            const value = createEl('value', {name: id});
++            if (isBool) {
++                if (arg.type === 'empty') return;
++                if (arg.type === 'literal') {
++                    throw this.error(`Input ${i + 1} of "${node.proccode}" needs a true/false block`, arg);
++                }
++                value.appendChild(this.exprEl(arg));
++            } else {
++                const shadow = createEl('shadow', {type: 'text'});
++                shadow.appendChild(createEl('field', {name: 'TEXT'}, arg.type === 'literal' ? arg.value : ''));
++                value.appendChild(shadow);
++                if (arg.type !== 'literal' && arg.type !== 'empty') value.appendChild(this.exprEl(arg));
++            }
++            block.appendChild(value);
++        });
++        return block;
++    }
++
++    chainEl (statements) {
++        let first = null;
++        let last = null;
++        for (const statement of statements) {
++            const el = this.commandEl(statement);
++            if (last) {
++                const next = createEl('next');
++                next.appendChild(el);
++                last.appendChild(next);
++            } else {
++                first = el;
++            }
++            last = el;
++        }
++        return first;
++    }
++
++    appendBody (block, body) {
++        const first = this.chainEl(body);
++        if (first) {
++            const next = createEl('next');
++            next.appendChild(first);
++            block.appendChild(next);
++        }
++        return block;
++    }
++
++    scriptEl (script) {
++        if (script.type === 'stack') {
++            if (!script.body.length) throw this.error('stack { } is empty', script);
++            return this.chainEl(script.body);
++        }
++        if (script.type === 'define') {
++            const proc = this.procedures.get(script.proccode);
++            const block = createEl('block', {type: 'procedures_definition'});
++            const value = createEl('value', {name: 'custom_block'});
++            const prototype = createEl('shadow', {type: 'procedures_prototype'});
++            prototype.appendChild(createEl('mutation', {
++                proccode: script.proccode,
++                argumentids: JSON.stringify(proc.ids),
++                argumentnames: JSON.stringify(script.params),
++                argumentdefaults: JSON.stringify(proc.types.map(t => (t === 'b' ? 'false' : ''))),
++                warp: script.warp ? 'true' : 'false'
++            }));
++            proc.ids.forEach((id, i) => {
++                const v = createEl('value', {name: id});
++                const reporter = createEl('shadow', {
++                    type: proc.types[i] === 'b' ? 'argument_reporter_boolean' : 'argument_reporter_string_number'
++                });
++                reporter.appendChild(createEl('field', {name: 'VALUE'}, script.params[i]));
++                v.appendChild(reporter);
++                prototype.appendChild(v);
++            });
++            value.appendChild(prototype);
++            block.appendChild(value);
++            this.params = new Map(script.params.map((p, i) => [p, proc.types[i]]));
++            try {
++                return this.appendBody(block, script.body);
++            } finally {
++                this.params = null;
++            }
++        }
++        // hat
++        const info = this.resolve(script.name, script);
++        if (!info.isHat) {
++            throw this.error(
++                `"${script.name}" can't start a script. Start with a "when" block like when_flag_clicked, or use stack { }`,
++                script
++            );
++        }
++        return this.appendBody(this.blockWithArgs(info, script.name, script.args, script), script.body);
++    }
++}
++
++// ---- custom blocks --------------------------------------------------------------------------
++
++const placeholderTypes = proccode => (proccode.match(/%[snb]/g) || []).map(p => p[1]);
++
++const existingProcedures = workspace => {
++    const map = new Map();
++    for (const top of workspace.getTopBlocks(false)) {
++        if (top.type !== 'procedures_definition') continue;
++        const prototype = top.getInputTargetBlock('custom_block');
++        if (!prototype) continue;
++        const m = prototype.mutationToDom();
++        const proccode = m.getAttribute('proccode');
++        map.set(proccode, {
++            topId: top.id,
++            ids: JSON.parse(m.getAttribute('argumentids') || '[]'),
++            names: JSON.parse(m.getAttribute('argumentnames') || '[]'),
++            types: placeholderTypes(proccode),
++            warp: m.getAttribute('warp') === 'true'
++        });
++    }
++    return map;
++};
++
++// ---- main entry ------------------------------------------------------------------------------
++
++/**
++ * Replace the scripts in the workspace with the scripts written in text.
++ * Scripts that didn't change keep their blocks, position and comments.
++ * @returns {{changed: boolean, created: number, removed: number}} what happened
++ */
++const applyText = (text, {ScratchBlocks, workspace, vm, toolboxXML}) => {
++    const scripts = parse(text);
++    const current = workspaceToText(workspace, ScratchBlocks).scripts;
++
++    const oldByKey = new Map();
++    const lockedIds = new Set();
++    for (const s of current) {
++        if (s.locked) {
++            lockedIds.add(s.id);
++            continue;
++        }
++        const key = scriptKey(s.text);
++        if (!oldByKey.has(key)) oldByKey.set(key, []);
++        oldByKey.get(key).push(s.id);
++    }
++
++    const keepIds = new Set();
++    const toCreate = [];
++    for (const script of scripts) {
++        if (script.type === 'locked') {
++            if (!lockedIds.has(script.id)) {
++                throw new TextCodeError('This locked_script line doesn\'t match a script any more. Delete the line', script.line);
++            }
++            keepIds.add(script.id);
++            continue;
++        }
++        const ids = oldByKey.get(script.tokenKey);
++        if (ids && ids.length) keepIds.add(ids.shift());
++        else toCreate.push(script);
++    }
++
++    // Custom blocks: kept definitions keep their ids; new or edited ones reuse ids when they still fit.
++    const oldProcs = existingProcedures(workspace);
++    const procedures = new Map();
++    for (const [proccode, proc] of oldProcs) {
++        if (keepIds.has(proc.topId)) procedures.set(proccode, proc);
++    }
++    for (const script of scripts) {
++        if (script.type !== 'define') continue;
++        const types = placeholderTypes(script.proccode);
++        if (types.length !== script.params.length) {
++            throw new TextCodeError(
++                `"${script.proccode}" has ${types.length} input slot${types.length === 1 ? '' : 's'} (%s, %n or %b) ` +
++                `but ${script.params.length} input name${script.params.length === 1 ? '' : 's'}`,
++                script.line
++            );
++        }
++        if (procedures.has(script.proccode) && !toCreate.includes(script)) continue;
++        if (procedures.has(script.proccode)) {
++            throw new TextCodeError(`There are two custom blocks called "${script.proccode}"`, script.line);
++        }
++        const old = oldProcs.get(script.proccode);
++        const ids = old && old.ids.length === types.length ?
++            old.ids :
++            types.map(() => ScratchBlocks.utils.genUid());
++        procedures.set(script.proccode, {ids, types, warp: script.warp});
++    }
++
++    const builder = new Builder({
++        ScratchBlocks,
++        workspace,
++        isStage: !!(vm.editingTarget && vm.editingTarget.isStage),
++        toolbox: parseToolbox(toolboxXML),
++        procedures
++    });
++    // Build everything first, so a mistake anywhere changes nothing.
++    const built = toCreate.map(script => builder.scriptEl(script));
++
++    const toRemove = workspace.getTopBlocks(false).filter(b => !b.isShadow() && !keepIds.has(b.id));
++    if (!built.length && !toRemove.length) {
++        return {changed: false, created: 0, removed: 0};
++    }
++
++    ScratchBlocks.Events.setGroup(true);
++    try {
++        for (const v of builder.newVariables.values()) {
++            const isLocal = v.type !== 'broadcast_msg' && !builder.isStage;
++            workspace.createVariable(v.name, v.type, v.id, isLocal, false);
++        }
++        for (const block of toRemove) block.dispose(false);
++        for (const el of built) ScratchBlocks.Xml.domToBlock(el, workspace);
++    } finally {
++        ScratchBlocks.Events.setGroup(false);
++    }
++    if (built.length) workspace.cleanUp();
++    return {changed: true, created: built.length, removed: toRemove.length};
++};
++
++const shadowDefault = (ScratchBlocks, shadowType, ownerType, fieldName) => {
++    const ws = new ScratchBlocks.Workspace();
++    try {
++        if (shadowType) {
++            const block = ws.newBlock(shadowType);
++            const f = block.inputList.flatMap(i => i.fieldRow).find(x => x.name && x.getValue);
++            return f ? String(f.getValue()) : '';
++        }
++        if (ownerType) {
++            const block = ws.newBlock(ownerType);
++            const f = block.getField(fieldName);
++            return f ? String(f.getValue()) : '';
++        }
++    } catch (e) {
++        return '';
++    } finally {
++        ws.dispose();
++    }
++    return '';
++};
++
++/**
++ * Short examples for the Commands list, made from the block palette.
++ * @returns {Array<{category: string, color: string, items: Array<{label: string, insert: string}>}>} groups
++ */
++const commandList = (ScratchBlocks, toolboxXML, aliases = ALIASES) => {
++    const opcodeToAlias = {};
++    for (const [alias, opcode] of Object.entries(aliases)) {
++        if (!opcodeToAlias[opcode]) opcodeToAlias[opcode] = alias;
++    }
++    const groups = [];
++    if (!toolboxXML) return groups;
++    const doc = new DOMParser().parseFromString(toolboxXML, 'text/xml');
++    for (const category of Array.from(doc.getElementsByTagName('category'))) {
++        const items = [];
++        for (const el of Array.from(category.children)) {
++            if (el.tagName.toLowerCase() !== 'block') continue;
++            const opcode = el.getAttribute('type');
++            if (!opcode || BINARY_OPERATORS[opcode] || opcode === 'operator_not' ||
++                opcode.startsWith('procedures_') || opcode.startsWith('argument_')) continue;
++            if (opcode === 'data_variable' || opcode === 'data_listcontents') continue;
++            const info = getBlockInfo(ScratchBlocks, opcode);
++            if (!info) continue;
++            const name = opcodeToAlias[opcode] || opcode;
++            const argText = info.args.map(spec => {
++                if (spec.variableType === '') return '$my_variable';
++                if (spec.variableType === 'list') return '@my_list';
++                const holder = Array.from(el.children).find(c => c.getAttribute('name') === spec.name);
++                const field = holder && (holder.tagName.toLowerCase() === 'field' ? holder : holder.getElementsByTagName('field')[0]);
++                let value = field ? field.textContent : '';
++                if (!field) {
++                    const shadow = holder && holder.getElementsByTagName('shadow')[0];
++                    value = shadowDefault(ScratchBlocks, shadow ? shadow.getAttribute('type') : null, spec.kind === 'field' ? opcode : null, spec.name);
++                }
++                if (spec.boolean) return '_';
++                return /^-?\d+(\.\d+)?$/.test(value) ? value : JSON.stringify(value);
++            });
++            let call = argText.length ? `${name}(${argText.join(', ')})` : name;
++            if (info.isHat) call += ' {\n    \n}';
++            else if (info.statements.length === 2) call = `if (${argText.join(', ')}) {\n    \n} else {\n    \n}`;
++            else if (info.statements.length) call += ' {\n    \n}';
++            items.push({label: call.split('\n')[0].replace(/ \{$/, ' { }'), insert: call, isHat: info.isHat});
++        }
++        if (items.length) {
++            const rawName = category.getAttribute('name') || '';
++            const categoryName = rawName.replace(/%\{BKY_([A-Z0-9_]+)\}/g, (m, key) => ScratchBlocks.Msg[key] || m);
++            groups.push({category: categoryName, color: category.getAttribute('colour'), items});
++        }
++    }
++    return groups;
++};
++
++export {
++    applyText,
++    commandList,
++    TextCodeError
++};
+diff --git a/src/lib/sl-text-code/parser.js b/src/lib/sl-text-code/parser.js
+new file mode 100644
+index 0000000..4a4e35e
+--- /dev/null
++++ b/src/lib/sl-text-code/parser.js
+@@ -0,0 +1,319 @@
++// Stick Lab Text coding -> syntax tree
++import {SYMBOL_TO_OPERATOR, NOT_PREC, BINARY_OPERATORS} from './aliases';
++
++class TextCodeError extends Error {
++    constructor (message, line) {
++        super(line ? `Line ${line}: ${message}` : message);
++        this.line = line;
++        this.plainMessage = message;
++    }
++}
++
++const IDENT_START = /[A-Za-z_]/;
++const IDENT_PART = /[A-Za-z0-9_]/;
++
++const tokenize = source => {
++    const tokens = [];
++    let i = 0;
++    let line = 1;
++    const push = (type, value, raw, start) => tokens.push({type, value, raw, line, start, end: i});
++    const readString = () => {
++        const start = i;
++        i++; // opening quote
++        let out = '';
++        while (i < source.length && source[i] !== '"') {
++            if (source[i] === '\n') throw new TextCodeError('Text in quotes must end on the same line (missing ")', line);
++            if (source[i] === '\\') {
++                const next = source[i + 1];
++                if (next === 'n') out += '\n';
++                else if (next === 't') out += '\t';
++                else if (next === 'u') {
++                    out += String.fromCharCode(parseInt(source.substr(i + 2, 4), 16));
++                    i += 4;
++                } else out += next;
++                i += 2;
++            } else {
++                out += source[i++];
++            }
++        }
++        if (source[i] !== '"') throw new TextCodeError('Missing closing " on this line', line);
++        i++;
++        return {value: out, raw: source.slice(start, i)};
++    };
++    const readIdent = () => {
++        const start = i;
++        while (i < source.length && IDENT_PART.test(source[i])) i++;
++        return source.slice(start, i);
++    };
++    while (i < source.length) {
++        const c = source[i];
++        const start = i;
++        if (c === '\n') {
++            line++;
++            i++;
++        } else if (c === ' ' || c === '\t' || c === '\r') {
++            i++;
++        } else if (c === '/' && source[i + 1] === '/') {
++            while (i < source.length && source[i] !== '\n') i++;
++        } else if (c === '/' && source[i + 1] === '*') {
++            const end = source.indexOf('*/', i + 2);
++            const stop = end === -1 ? source.length : end + 2;
++            for (let j = i; j < stop; j++) if (source[j] === '\n') line++;
++            i = stop;
++        } else if (c === '"') {
++            const s = readString();
++            push('string', s.value, s.raw, start);
++        } else if (/[0-9]/.test(c) || (c === '.' && /[0-9]/.test(source[i + 1] || ''))) {
++            const m = /^(\d+\.?\d*|\.\d+)(e[+-]?\d+)?/i.exec(source.slice(i));
++            i += m[0].length;
++            push('number', m[0], m[0], start);
++        } else if (c === '$' || c === '@' || c === '%') {
++            i++;
++            let name;
++            if (source[i] === '"') name = readString().value;
++            else if (IDENT_START.test(source[i] || '')) name = readIdent();
++            else throw new TextCodeError(`"${c}" must be followed by a name, like ${c}score`, line);
++            push(c === '$' ? 'variable' : c === '@' ? 'list' : 'argument', name, source.slice(start, i), start);
++        } else if (IDENT_START.test(c)) {
++            const word = readIdent();
++            push('ident', word, word, start);
++        } else if (c === '=' && source[i + 1] === '=') {
++            i += 2;
++            push('op', '==', '==', start);
++        } else if ('(){},;'.includes(c)) {
++            i++;
++            push('punct', c, c, start);
++        } else if ('+-*/<>'.includes(c)) {
++            i++;
++            push('op', c, c, start);
++        } else if (c === '=') {
++            throw new TextCodeError('Use == to compare. To set a variable use set_var($name, value)', line);
++        } else {
++            throw new TextCodeError(`Stick Lab doesn't understand the character "${c}"`, line);
++        }
++    }
++    tokens.push({type: 'eof', value: null, raw: '', line, start: source.length, end: source.length});
++    return tokens;
++};
++
++const parse = source => {
++    const tokens = tokenize(source);
++    let pos = 0;
++    const peek = (o = 0) => tokens[pos + o];
++    const next = () => tokens[pos++];
++    const is = (type, value) => peek().type === type && (value === undefined || peek().value === value);
++    const isWord = value => is('ident', value);
++    const expect = (type, value, what) => {
++        const t = peek();
++        if (t.type !== type || (value !== undefined && t.value !== value)) {
++            const found = t.type === 'eof' ? 'the end of the code' : `"${t.raw}"`;
++            throw new TextCodeError(`Expected ${what || `"${value}"`} but found ${found}`, t.line);
++        }
++        return next();
++    };
++
++    let parseExpr; // eslint-disable-line prefer-const
++
++    const parseArgs = () => {
++        const args = [];
++        expect('punct', '(');
++        if (!is('punct', ')')) {
++            args.push(parseExpr(0));
++            while (is('punct', ',')) {
++                next();
++                args.push(parseExpr(0));
++            }
++        }
++        expect('punct', ')', '")" or ","');
++        return args;
++    };
++
++    const parsePrimary = () => {
++        const t = peek();
++        if (t.type === 'number') {
++            next();
++            return {type: 'literal', value: t.value, isNumber: true, line: t.line};
++        }
++        if (t.type === 'string') {
++            next();
++            return {type: 'literal', value: t.value, isNumber: false, line: t.line};
++        }
++        if (t.type === 'variable' || t.type === 'list' || t.type === 'argument') {
++            next();
++            return {type: t.type, name: t.value, line: t.line};
++        }
++        if (t.type === 'op' && t.value === '-' && peek(1).type === 'number') {
++            next();
++            const n = next();
++            return {type: 'literal', value: `-${n.value}`, isNumber: true, line: t.line};
++        }
++        if (t.type === 'punct' && t.value === '(') {
++            next();
++            const e = parseExpr(0);
++            expect('punct', ')', '")"');
++            return e;
++        }
++        if (t.type === 'ident') {
++            if (t.value === '_') {
++                next();
++                return {type: 'empty', line: t.line};
++            }
++            if (t.value === 'not') {
++                next();
++                return {type: 'not', operand: parseExpr(NOT_PREC), line: t.line};
++            }
++            next();
++            const args = is('punct', '(') ? parseArgs() : [];
++            return {type: 'call', name: t.value, args, line: t.line};
++        }
++        const found = t.type === 'eof' ? 'the end of the code' : `"${t.raw}"`;
++        throw new TextCodeError(`Expected a value but found ${found}`, t.line);
++    };
++
++    const binaryInfo = t => {
++        let symbol = null;
++        if (t.type === 'op') symbol = t.value;
++        if (t.type === 'ident' && (t.value === 'and' || t.value === 'or' || t.value === 'mod')) symbol = t.value;
++        if (!symbol) return null;
++        const opcode = SYMBOL_TO_OPERATOR[symbol];
++        return opcode ? {opcode, prec: BINARY_OPERATORS[opcode].prec} : null;
++    };
++
++    parseExpr = minPrec => {
++        let left = parsePrimary();
++        for (;;) {
++            const info = binaryInfo(peek());
++            if (!info || info.prec < minPrec) break;
++            const t = next();
++            const right = parseExpr(info.prec + 1);
++            left = {type: 'binary', opcode: info.opcode, left, right, line: t.line};
++        }
++        return left;
++    };
++
++    let parseBody; // eslint-disable-line prefer-const
++
++    const parseStatement = () => {
++        const t = peek();
++        if (t.type === 'punct' && t.value === ';') {
++            next();
++            return null;
++        }
++        if (t.type !== 'ident') {
++            throw new TextCodeError(`A line should start with a command like move(10), not "${t.raw}"`, t.line);
++        }
++        if (t.value === 'call') {
++            next();
++            const proccode = expect('string', undefined, 'the custom block name in quotes, like call "jump %s" (10)');
++            const args = is('punct', '(') ? parseArgs() : [];
++            return {type: 'callProcedure', proccode: proccode.value, args, line: t.line};
++        }
++        if (t.value === 'else') throw new TextCodeError('"else" must come right after the } of an if', t.line);
++        next();
++        const args = is('punct', '(') ? parseArgs() : [];
++        const bodies = [];
++        if (is('punct', '{')) {
++            bodies.push(parseBody());
++            if (isWord('else')) {
++                next();
++                if (isWord('if')) {
++                    // else if (...) { } -> else { if (...) { } }
++                    bodies.push([parseStatement()]);
++                } else {
++                    bodies.push(parseBody());
++                }
++            }
++        }
++        return {type: 'command', name: t.value, args, bodies, line: t.line};
++    };
++
++    parseBody = () => {
++        expect('punct', '{', '"{"');
++        const statements = [];
++        while (!is('punct', '}')) {
++            if (is('eof')) throw new TextCodeError('Missing } at the end of a script', peek().line);
++            const s = parseStatement();
++            if (s) statements.push(s);
++        }
++        next();
++        return statements;
++    };
++
++    const scripts = [];
++    while (!is('eof')) {
++        const startToken = peek();
++        let script;
++        if (is('punct', ';')) {
++            next();
++            continue;
++        }
++        if (isWord('define')) {
++            next();
++            let warp = false;
++            if (isWord('warp')) {
++                next();
++                warp = true;
++            }
++            const proccode = expect('string', undefined, 'the custom block name in quotes, like define "jump %s" (%height)');
++            const params = [];
++            if (is('punct', '(')) {
++                next();
++                while (!is('punct', ')')) {
++                    const p = expect('argument', undefined, 'an input name like %height');
++                    params.push(p.value);
++                    if (is('punct', ',')) next();
++                    else break;
++                }
++                expect('punct', ')', '")"');
++            }
++            script = {type: 'define', proccode: proccode.value, params, warp, body: parseBody(), line: startToken.line};
++        } else if (isWord('stack')) {
++            next();
++            script = {type: 'stack', body: parseBody(), line: startToken.line};
++        } else if (isWord('locked_script')) {
++            next();
++            expect('punct', '(');
++            const id = expect('string', undefined, 'the locked script id in quotes');
++            expect('punct', ')', '")"');
++            script = {type: 'locked', id: id.value, line: startToken.line};
++        } else if (is('ident')) {
++            const name = next();
++            const args = is('punct', '(') ? parseArgs() : [];
++            if (!is('punct', '{')) {
++                throw new TextCodeError(
++                    `"${name.value}" is outside a script. Put commands inside a "when" block like when_flag_clicked { ... } or inside stack { ... }`,
++                    name.line
++                );
++            }
++            script = {type: 'hat', name: name.value, args, body: parseBody(), line: startToken.line};
++        } else {
++            throw new TextCodeError(`A script should start with a "when" block like when_flag_clicked {, not "${peek().raw}"`, peek().line);
++        }
++        const endToken = tokens[pos - 1];
++        script.tokenKey = tokens.slice(tokens.indexOf(startToken), pos).map(tk => `${tk.type}:${tk.value}`)
++            .join(' ');
++        script.endLine = endToken.line;
++        scripts.push(script);
++    }
++    return scripts;
++};
++
++/**
++ * A whitespace- and comment-insensitive key for a piece of code, used to tell if a script changed.
++ * @param {string} source Code for one script
++ * @returns {string} key
++ */
++const scriptKey = source => {
++    try {
++        const tokens = tokenize(source);
++        return tokens.filter(t => t.type !== 'eof').map(t => `${t.type}:${t.value}`).join(' ');
++    } catch (e) {
++        return null;
++    }
++};
++
++export {
++    parse,
++    scriptKey,
++    TextCodeError
++};
+diff --git a/src/lib/sl-text-code/printer.js b/src/lib/sl-text-code/printer.js
+new file mode 100644
+index 0000000..614e8f2
+--- /dev/null
++++ b/src/lib/sl-text-code/printer.js
+@@ -0,0 +1,247 @@
++// Blocks -> Stick Lab Text coding
++import {OPCODE_TO_ALIAS, BINARY_OPERATORS, NOT_PREC} from './aliases';
++
++const INDENT = '    ';
++const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
++const NUMBER_RE = /^-?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i;
++const NUMBER_SHADOWS = new Set([
++    'math_number', 'math_integer', 'math_whole_number', 'math_positive_number', 'math_angle'
++]);
++
++class Unsupported extends Error {}
++
++const quote = s => JSON.stringify(String(s));
++const nameToken = (prefix, name) => prefix + (IDENT_RE.test(name) ? name : quote(name));
++const blockName = opcode => OPCODE_TO_ALIAS[opcode] || opcode;
++
++const literal = value => {
++    const text = String(value);
++    return NUMBER_RE.test(text.trim()) && text.trim() === text ? text : quote(text);
++};
++
++const getVariableName = (field, block) => {
++    const workspace = block.workspace;
++    const id = field.getValue();
++    const variable = workspace.getVariableById(id);
++    return variable ? variable.name : field.getText();
++};
++
++const variableTypeOf = field => {
++    if (typeof field.defaultType_ === 'string') return field.defaultType_;
++    if (Array.isArray(field.variableTypes_) && field.variableTypes_.length) return field.variableTypes_[0];
++    return '';
++};
++
++const isVariableField = (field, ScratchBlocks) =>
++    ScratchBlocks.FieldVariable && field instanceof ScratchBlocks.FieldVariable;
++
++const isLabelField = (field, ScratchBlocks) =>
++    !field.name ||
++    (ScratchBlocks.FieldLabel && field instanceof ScratchBlocks.FieldLabel && !field.EDITABLE) ||
++    (ScratchBlocks.FieldImage && field instanceof ScratchBlocks.FieldImage);
++
++const fieldToText = (field, block, ScratchBlocks) => {
++    if (isVariableField(field, ScratchBlocks)) {
++        const type = variableTypeOf(field);
++        const name = getVariableName(field, block);
++        if (type === 'list') return nameToken('@', name);
++        if (type === 'broadcast_msg') return quote(name);
++        return nameToken('$', name);
++    }
++    return quote(field.getValue());
++};
++
++/**
++ * Describe the "slots" of a block in visual order.
++ * @returns {{args: Array, statements: Array}} args are field/value inputs, statements are C-block bodies.
++ */
++const describeBlock = (block, ScratchBlocks) => {
++    const args = [];
++    const statements = [];
++    for (const input of block.inputList) {
++        for (const field of input.fieldRow) {
++            if (isLabelField(field, ScratchBlocks)) continue;
++            args.push({kind: 'field', name: field.name, field});
++        }
++        if (input.type === ScratchBlocks.INPUT_VALUE) {
++            args.push({kind: 'value', name: input.name, input});
++        } else if (input.type === ScratchBlocks.NEXT_STATEMENT) {
++            statements.push({name: input.name, input});
++        }
++    }
++    return {args, statements};
++};
++
++const shadowToText = (shadow, ScratchBlocks) => {
++    const fields = [];
++    for (const input of shadow.inputList) {
++        if (input.connection && input.connection.targetBlock()) throw new Unsupported('nested shadow');
++        for (const field of input.fieldRow) {
++            if (!isLabelField(field, ScratchBlocks)) fields.push(field);
++        }
++    }
++    if (fields.length !== 1) throw new Unsupported(`shadow ${shadow.type}`);
++    const field = fields[0];
++    if (isVariableField(field, ScratchBlocks)) return quote(getVariableName(field, shadow));
++    const value = field.getValue();
++    if (NUMBER_SHADOWS.has(shadow.type) || shadow.type === 'text') return literal(value);
++    return quote(value);
++};
++
++let exprToText; // eslint-disable-line prefer-const
++
++const valueToText = (input, ScratchBlocks) => {
++    const target = input.connection && input.connection.targetBlock();
++    if (!target) return '_';
++    if (target.isShadow()) return shadowToText(target, ScratchBlocks);
++    return exprToText(target, ScratchBlocks, 0);
++};
++
++const argsToText = (args, block, ScratchBlocks) => args.map(arg => (
++    arg.kind === 'field' ? fieldToText(arg.field, block, ScratchBlocks) : valueToText(arg.input, ScratchBlocks)
++));
++
++exprToText = (block, ScratchBlocks, parentPrec) => {
++    const type = block.type;
++    if (type === 'data_variable') return nameToken('$', getVariableName(block.getField('VARIABLE'), block));
++    if (type === 'data_listcontents') return nameToken('@', getVariableName(block.getField('LIST'), block));
++    if (type === 'argument_reporter_string_number' || type === 'argument_reporter_boolean') {
++        return nameToken('%', block.getFieldValue('VALUE'));
++    }
++    const op = BINARY_OPERATORS[type];
++    if (op) {
++        const left = valueToText(block.getInput(op.inputs[0]), ScratchBlocks);
++        const right = valueToText(block.getInput(op.inputs[1]), ScratchBlocks);
++        const leftBlock = block.getInputTargetBlock(op.inputs[0]);
++        const rightBlock = block.getInputTargetBlock(op.inputs[1]);
++        const l = leftBlock && !leftBlock.isShadow() ? exprToText(leftBlock, ScratchBlocks, op.prec) : left;
++        const r = rightBlock && !rightBlock.isShadow() ? exprToText(rightBlock, ScratchBlocks, op.prec + 1) : right;
++        const text = `${l} ${op.symbol} ${r}`;
++        return op.prec < parentPrec ? `(${text})` : text;
++    }
++    if (type === 'operator_not') {
++        const inner = block.getInputTargetBlock('OPERAND');
++        const text = `not ${inner && !inner.isShadow() ? exprToText(inner, ScratchBlocks, NOT_PREC) : '_'}`;
++        return NOT_PREC < parentPrec ? `(${text})` : text;
++    }
++    if (!block.outputConnection) throw new Unsupported(`${type} is not a reporter`);
++    if (type === 'procedures_call' || type.startsWith('procedures_')) throw new Unsupported(type);
++    const {args, statements} = describeBlock(block, ScratchBlocks);
++    if (statements.length) throw new Unsupported(`${type} has statements`);
++    const name = blockName(type);
++    return args.length ? `${name}(${argsToText(args, block, ScratchBlocks).join(', ')})` : name;
++};
++
++const procedureInfo = prototype => {
++    const mutation = prototype.mutationToDom();
++    return {
++        proccode: mutation.getAttribute('proccode'),
++        argumentnames: JSON.parse(mutation.getAttribute('argumentnames') || '[]'),
++        warp: mutation.getAttribute('warp') === 'true'
++    };
++};
++
++let chainToLines; // eslint-disable-line prefer-const
++
++const statementToLines = (block, ScratchBlocks, indent) => {
++    const type = block.type;
++    if (block.outputConnection) throw new Unsupported('reporter in a stack');
++    if (type === 'procedures_call') {
++        const mutation = block.mutationToDom();
++        const proccode = mutation.getAttribute('proccode');
++        const values = block.inputList
++            .filter(input => input.type === ScratchBlocks.INPUT_VALUE)
++            .map(input => valueToText(input, ScratchBlocks));
++        return [`${indent}call ${quote(proccode)}${values.length ? ` (${values.join(', ')})` : ''}`];
++    }
++    if (type.startsWith('procedures_')) throw new Unsupported(type);
++    const {args, statements} = describeBlock(block, ScratchBlocks);
++    if (statements.length > 2) throw new Unsupported('more than two bodies');
++    let name = blockName(type);
++    if (type === 'control_if_else') name = 'if';
++    const argText = argsToText(args, block, ScratchBlocks);
++    let head = args.length ? `${name}(${argText.join(', ')})` : name;
++    if (name === 'if' || name === 'repeat' || name === 'repeat_until' || name === 'while' || name === 'wait_until') {
++        head = `${name} (${argText.join(', ')})`;
++    }
++    if (!statements.length) return [indent + head];
++    const lines = [`${indent}${head} {`];
++    statements.forEach((statement, i) => {
++        if (i > 0) lines.push(`${indent}} else {`);
++        const first = statement.input.connection.targetBlock();
++        lines.push(...chainToLines(first, ScratchBlocks, indent + INDENT));
++    });
++    lines.push(`${indent}}`);
++    return lines;
++};
++
++chainToLines = (block, ScratchBlocks, indent) => {
++    const lines = [];
++    while (block) {
++        lines.push(...statementToLines(block, ScratchBlocks, indent));
++        block = block.getNextBlock();
++    }
++    return lines;
++};
++
++const countBlocks = top => top.getDescendants(false).filter(b => !b.isShadow()).length;
++
++const scriptToLines = (top, ScratchBlocks) => {
++    const type = top.type;
++    if (type === 'procedures_definition') {
++        const prototype = top.getInputTargetBlock('custom_block');
++        if (!prototype) throw new Unsupported('definition without prototype');
++        const info = procedureInfo(prototype);
++        const params = info.argumentnames.map(n => nameToken('%', n)).join(', ');
++        return [
++            `define ${info.warp ? 'warp ' : ''}${quote(info.proccode)} (${params}) {`,
++            ...chainToLines(top.getNextBlock(), ScratchBlocks, INDENT),
++            '}'
++        ];
++    }
++    if (top.outputConnection) throw new Unsupported('loose reporter');
++    const isHat = !top.previousConnection;
++    if (isHat) {
++        const {args, statements} = describeBlock(top, ScratchBlocks);
++        if (statements.length) throw new Unsupported('hat with statements');
++        const name = blockName(type);
++        const head = args.length ? `${name}(${argsToText(args, top, ScratchBlocks).join(', ')})` : name;
++        return [`${head} {`, ...chainToLines(top.getNextBlock(), ScratchBlocks, INDENT), '}'];
++    }
++    return ['stack {', ...chainToLines(top, ScratchBlocks, INDENT), '}'];
++};
++
++/**
++ * @param {Blockly.Workspace} workspace The main blocks workspace
++ * @param {object} ScratchBlocks scratch-blocks
++ * @returns {{text: string, scripts: Array<{id: string, text: string, locked: boolean}>}} The workspace as text
++ */
++const workspaceToText = (workspace, ScratchBlocks) => {
++    const scripts = [];
++    const tops = workspace.getTopBlocks(true).filter(b => !b.isShadow() && !b.isInsertionMarker());
++    for (const top of tops) {
++        try {
++            scripts.push({id: top.id, text: scriptToLines(top, ScratchBlocks).join('\n'), locked: false});
++        } catch (e) {
++            if (!(e instanceof Unsupported)) throw e;
++            const n = countBlocks(top);
++            scripts.push({
++                id: top.id,
++                text: `locked_script(${quote(top.id)}) // ${n} block${n === 1 ? '' : 's'}: edit this one in Block coding`,
++                locked: true
++            });
++        }
++    }
++    return {
++        text: scripts.map(s => s.text).join('\n\n') + (scripts.length ? '\n' : ''),
++        scripts
++    };
++};
++
++export {
++    workspaceToText,
++    describeBlock,
++    isLabelField,
++    isVariableField,
++    variableTypeOf
++};
+diff --git a/src/lib/sl-workspace-registry.js b/src/lib/sl-workspace-registry.js
+new file mode 100644
+index 0000000..019d8f1
+--- /dev/null
++++ b/src/lib/sl-workspace-registry.js
+@@ -0,0 +1,21 @@
++// Stick Lab: lets the Text coding editor reach the main blocks workspace.
++let current = null;
++const listeners = new Set();
++
++const setWorkspace = (workspace, ScratchBlocks) => {
++    current = workspace ? {workspace, ScratchBlocks} : null;
++    listeners.forEach(fn => fn(current));
++};
++
++const getWorkspace = () => current;
++
++const onWorkspaceChange = fn => {
++    listeners.add(fn);
++    return () => listeners.delete(fn);
++};
++
++export {
++    setWorkspace,
++    getWorkspace,
++    onWorkspaceChange
++};
 diff --git a/src/lib/themes/accent/classic.js b/src/lib/themes/accent/classic.js
 new file mode 100644
 index 0000000..7f435c1
@@ -569,6 +3182,196 @@ index 0000000..7f435c1
 +    guiColors,
 +    blockColors
 +};
+diff --git a/src/lib/themes/blocks/three.js b/src/lib/themes/blocks/three.js
+index 9c3fc45..794c955 100644
+--- a/src/lib/themes/blocks/three.js
++++ b/src/lib/themes/blocks/three.js
+@@ -1,94 +1,94 @@
+ const blockColors = {
+     motion: {
+-        primary: '#4C97FF',
+-        secondary: '#4280D7',
+-        tertiary: '#3373CC',
+-        quaternary: '#3373CC'
++        primary: '#2E6FC2',
++        secondary: '#2862AB',
++        tertiary: '#21508C',
++        quaternary: '#21508C'
+     },
+     looks: {
+-        primary: '#9966FF',
+-        secondary: '#855CD6',
+-        tertiary: '#774DCB',
+-        quaternary: '#774DCB'
++        primary: '#6B4FB8',
++        secondary: '#5D43A5',
++        tertiary: '#4C3687',
++        quaternary: '#4C3687'
+     },
+     sounds: {
+-        primary: '#CF63CF',
+-        secondary: '#C94FC9',
+-        tertiary: '#BD42BD',
+-        quaternary: '#BD42BD'
++        primary: '#B2479A',
++        secondary: '#9D3E88',
++        tertiary: '#80336F',
++        quaternary: '#80336F'
+     },
+     control: {
+-        primary: '#FFAB19',
+-        secondary: '#EC9C13',
+-        tertiary: '#CF8B17',
+-        quaternary: '#CF8B17'
++        primary: '#D9752B',
++        secondary: '#C26723',
++        tertiary: '#9F541C',
++        quaternary: '#9F541C'
+     },
+     event: {
+-        primary: '#FFBF00',
+-        secondary: '#E6AC00',
+-        tertiary: '#CC9900',
+-        quaternary: '#CC9900'
++        primary: '#D4A21C',
++        secondary: '#BB8F19',
++        tertiary: '#997514',
++        quaternary: '#997514'
+     },
+     sensing: {
+-        primary: '#5CB1D6',
+-        secondary: '#47A8D1',
+-        tertiary: '#2E8EB8',
+-        quaternary: '#2E8EB8'
++        primary: '#2093B5',
++        secondary: '#1C819F',
++        tertiary: '#176A82',
++        quaternary: '#176A82'
+     },
+     pen: {
+-        primary: '#0fBD8C',
+-        secondary: '#0DA57A',
+-        tertiary: '#0B8E69',
+-        quaternary: '#0B8E69'
++        primary: '#2E8B7A',
++        secondary: '#287A6B',
++        tertiary: '#216458',
++        quaternary: '#216458'
+     },
+     operators: {
+-        primary: '#59C059',
+-        secondary: '#46B946',
+-        tertiary: '#389438',
+-        quaternary: '#389438'
++        primary: '#43A047',
++        secondary: '#3B8D3E',
++        tertiary: '#307333',
++        quaternary: '#307333'
+     },
+     data: {
+-        primary: '#FF8C1A',
+-        secondary: '#FF8000',
+-        tertiary: '#DB6E00',
+-        quaternary: '#DB6E00'
++        primary: '#D65A2A',
++        secondary: '#BD4F24',
++        tertiary: '#9B411E',
++        quaternary: '#9B411E'
+     },
+     // This is not a new category, but rather for differentiation
+     // between lists and scalar variables.
+     data_lists: {
+-        primary: '#FF661A',
+-        secondary: '#FF5500',
+-        tertiary: '#E64D00',
+-        quaternary: '#E64D00'
++        primary: '#BC3F33',
++        secondary: '#A5372D',
++        tertiary: '#872D25',
++        quaternary: '#872D25'
+     },
+     more: {
+-        primary: '#FF6680',
+-        secondary: '#FF4D6A',
+-        tertiary: '#FF3355',
+-        quaternary: '#FF3355'
++        primary: '#C23A6B',
++        secondary: '#AB335E',
++        tertiary: '#8C2A4D',
++        quaternary: '#8C2A4D'
+     },
+     addons: {
+-        primary: '#29beb8',
+-        secondary: '#3aa8a4',
+-        tertiary: '#3aa8a4',
+-        quaternary: '#3aa8a4'
++        primary: '#2F9D99',
++        secondary: '#298A87',
++        tertiary: '#22716E',
++        quaternary: '#22716E'
+     },
+     text: '#FFFFFF',
+-    workspace: '#F9F9F9',
+-    toolboxHover: '#4C97FF',
+-    toolboxSelected: '#E9EEF2',
+-    toolboxText: '#575E75',
++    workspace: '#F5F8FC',
++    toolboxHover: '#2E6FC2',
++    toolboxSelected: '#DCE7F5',
++    toolboxText: '#1D4F91',
+     toolbox: '#FFFFFF',
+-    blackText: '#575E75',
+-    flyout: '#F9F9F9',
++    blackText: '#1F3550',
++    flyout: '#EEF3FA',
+     scrollbar: '#CECDCE',
+     scrollbarHover: '#CECDCE',
+     textField: '#FFFFFF',
+-    textFieldText: '#575E75',
++    textFieldText: '#1F3550',
+     insertionMarker: '#000000',
+     insertionMarkerOpacity: 0.2,
+     dragShadowOpacity: 0.6,
+-    stackGlow: '#FFF200',
++    stackGlow: '#FFD24A',
+     stackGlowSize: 4,
+     stackGlowOpacity: 1,
+     replacementGlow: '#FFFFFF',
+@@ -98,9 +98,9 @@ const blockColors = {
+     // CSS colours: support RGBA
+     fieldShadow: 'rgba(255, 255, 255, 0.3)',
+     dropDownShadow: 'rgba(0, 0, 0, .3)',
+-    numPadBackground: '#547AB2',
+-    numPadBorder: '#435F91',
+-    numPadActiveBackground: '#435F91',
++    numPadBackground: '#2E6FC2',
++    numPadBorder: '#1D4F91',
++    numPadActiveBackground: '#1D4F91',
+     numPadText: 'white', // Do not use hex here, it cannot be inlined with data-uri SVG
+     valueReportBackground: '#FFFFFF',
+     valueReportBorder: '#AAAAAA',
+@@ -111,17 +111,17 @@ const blockColors = {
+     contextMenuForeground: '#000000',
+     contextMenuActiveBackground: '#d6e9f8',
+     contextMenuDisabledForeground: '#cccccc',
+-    flyoutLabelColor: '#575E75',
++    flyoutLabelColor: '#1D4F91',
+     checkboxInactiveBackground: '#ffffff',
+     checkboxInactiveBorder: '#c8c8c8',
+-    checkboxActiveBackground: '#4C97FF',
+-    checkboxActiveBorder: '#3373CC',
++    checkboxActiveBackground: '#2E6FC2',
++    checkboxActiveBorder: '#1D4F91',
+     checkboxCheck: '#ffffff',
+     buttonBorder: '#c6c6c6',
+     buttonActiveBackground: '#ffffff',
+     buttonForeground: '#575E75',
+     zoomIconFilter: 'none',
+-    gridColor: '#dddddd'
++    gridColor: '#d3deec'
+ };
+ 
+ const extensions = {};
 diff --git a/src/lib/themes/index.js b/src/lib/themes/index.js
 index d7b9f20..64ff40c 100644
 --- a/src/lib/themes/index.js
