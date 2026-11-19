@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://stick-manx.github.io/sitemap.xml
+Sitemap: https://stick-hubs.github.io/sitemap.xml
