@@ -1,0 +1,13 @@
+name = "stick-lab-duo"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+
+[vars]
+# Messages per person per day. The owner pass has no limit.
+DAILY_LIMIT = "30"
+
+# Create it with: npx wrangler kv namespace create DUO_KV
+# then paste the id it prints here.
+[[kv_namespaces]]
+binding = "DUO_KV"
+id = "PASTE_THE_KV_ID_HERE"

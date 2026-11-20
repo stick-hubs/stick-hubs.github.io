@@ -73,20 +73,21 @@ index ad44099..bda246b 100644
      border: 1px solid $looks-secondary;
      box-sizing: content-box; /* To match scratch-block vertical toolbox borders */
 diff --git a/src/components/gui/gui.jsx b/src/components/gui/gui.jsx
-index 30f8336..51d12d9 100644
+index 30f8336..93b2048 100644
 --- a/src/components/gui/gui.jsx
 +++ b/src/components/gui/gui.jsx
-@@ -44,6 +44,9 @@ import {Theme} from '../../lib/themes';
+@@ -44,6 +44,10 @@ import {Theme} from '../../lib/themes';
  
  import {isRendererSupported, isBrowserSupported} from '../../lib/tw-environment-support-prober';
  
 +import '../../lib/sl-classic-ui.js';
 +import CodeModeToggle from '../sl-text-code/code-mode-toggle.jsx';
 +import TextCodeEditor from '../sl-text-code/text-code-editor.jsx';
++import DuoPanel from '../sl-duo/duo-panel.jsx';
  import styles from './gui.css';
  import addExtensionIcon from './icon--extensions.svg';
  import codeIcon from '!../../lib/tw-recolor/build!./icon--code.svg';
-@@ -343,9 +346,9 @@ const GUIComponent = props => {
+@@ -343,9 +347,9 @@ const GUIComponent = props => {
                                              src={codeIcon()}
                                          />
                                          <FormattedMessage
@@ -99,7 +100,7 @@ index 30f8336..51d12d9 100644
                                          />
                                      </Tab>
                                      <Tab
-@@ -400,19 +403,10 @@ const GUIComponent = props => {
+@@ -400,19 +404,10 @@ const GUIComponent = props => {
                                              theme={theme}
                                              vm={vm}
                                          />
@@ -121,11 +122,19 @@ index 30f8336..51d12d9 100644
                                      </Box>
                                      <Box className={styles.watermark}>
                                          <Watermark />
+@@ -449,6 +444,7 @@ const GUIComponent = props => {
+                         </Box>
+                     </Box>
+                 </Box>
++                <DuoPanel vm={vm} />
+                 <DragLayer />
+             </Box>
+         );
 diff --git a/src/components/menu-bar/menu-bar.css b/src/components/menu-bar/menu-bar.css
-index 444e77c..85d4bda 100644
+index 444e77c..ccb2758 100644
 --- a/src/components/menu-bar/menu-bar.css
 +++ b/src/components/menu-bar/menu-bar.css
-@@ -233,3 +233,32 @@
+@@ -233,3 +233,52 @@
      color: inherit;
      text-decoration: none;
  }
@@ -158,19 +167,40 @@ index 444e77c..85d4bda 100644
 +    font-size: 0.75rem;
 +    opacity: 0.85;
 +}
++
++.duo-button {
++    display: flex;
++    align-items: center;
++    gap: 0.3rem;
++    margin: 0 0.25rem;
++    padding: 0.2rem 0.6rem;
++    border: 1px solid rgba(255, 255, 255, 0.6);
++    border-radius: 12px;
++    background: linear-gradient(180deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.12) 50%, rgba(255, 255, 255, 0.05) 51%, rgba(255, 255, 255, 0.18) 100%);
++    color: #ffffff;
++    font: bold 0.8rem "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
++    cursor: pointer;
++    height: 1.9rem;
++    align-self: center;
++}
++.duo-spark {
++    color: #ffe27a;
++    text-shadow: 0 0 4px rgba(255, 220, 90, 0.8);
++}
 diff --git a/src/components/menu-bar/menu-bar.jsx b/src/components/menu-bar/menu-bar.jsx
-index 6caddb5..edc4f31 100644
+index 6caddb5..7194815 100644
 --- a/src/components/menu-bar/menu-bar.jsx
 +++ b/src/components/menu-bar/menu-bar.jsx
-@@ -96,6 +96,7 @@ import editIcon from './icon--edit.svg';
+@@ -96,6 +96,8 @@ import editIcon from './icon--edit.svg';
  import addonsIcon from './addons.svg';
  import errorIcon from './tw-error.svg';
  import advancedIcon from './tw-advanced.svg';
 +import stickLabLogo from './sl-logo.svg';
++import {toggleDuo} from '../sl-duo/duo-store';
  
  import ninetiesLogo from './nineties_logo.svg';
  import catLogo from './cat_logo.svg';
-@@ -492,6 +493,21 @@ class MenuBar extends React.Component {
+@@ -492,6 +494,29 @@ class MenuBar extends React.Component {
              >
                  <div className={styles.mainMenu}>
                      <div className={styles.fileGroup}>
@@ -189,10 +219,18 @@ index 6caddb5..edc4f31 100644
 +                            />
 +                            <span className={styles.stickLabName}>{'Stick Lab'}<span className={styles.stickLabVersion}>{' 1.1'}</span></span>
 +                        </a>
++                        <button
++                            className={classNames(styles.menuBarItem, styles.hoverable, styles.duoButton)}
++                            title="Stick Lab Duo: your AI coding helper"
++                            onClick={toggleDuo}
++                        >
++                            <span className={styles.duoSpark}>{'\u2726'}</span>
++                            <span>{'Duo'}</span>
++                        </button>
                          {this.props.errors.length > 0 && <div>
                              <MenuLabel
                                  open={this.props.errorsMenuOpen}
-@@ -1015,7 +1031,7 @@ class MenuBar extends React.Component {
+@@ -1015,7 +1040,7 @@ class MenuBar extends React.Component {
                      <div className={styles.menuBarItem}>
                          <a
                              className={styles.feedbackLink}
@@ -1675,6 +1713,829 @@ index 0000000..4890fb7
 +    flex-grow: 1;
 +    min-width: 0;
 +    min-height: 0;
++}
+diff --git a/src/components/sl-duo/duo-panel.jsx b/src/components/sl-duo/duo-panel.jsx
+new file mode 100644
+index 0000000..4814f90
+--- /dev/null
++++ b/src/components/sl-duo/duo-panel.jsx
+@@ -0,0 +1,462 @@
++import React from 'react';
++import PropTypes from 'prop-types';
++import {connect} from 'react-redux';
++import classNames from 'classnames';
++import {isDuoOpen, setDuoOpen, onDuoChange} from './duo-store';
++import {loadSettings, saveSettings, loadConfig, sendToDuo} from '../../lib/sl-duo/duo-client';
++import {getWorkspace} from '../../lib/sl-workspace-registry';
++import {workspaceToText} from '../../lib/sl-text-code/printer';
++import {applyText, commandList} from '../../lib/sl-text-code/apply';
++import styles from './duo.css';
++
++const WELCOME = 'Hi! I\'m **Stick Lab Duo**. I can explain blocks, find bugs, and write scripts for you. ' +
++    'Try: "make my sprite jump when I press space" or "why doesn\'t my score go up?"';
++
++const SUGGESTIONS = [
++    'Make my sprite jump when I press space',
++    'Explain what my scripts do',
++    'Give me an idea for a game'
++];
++
++const SYNTAX = `Stick Lab Text coding (each script starts with a "when" block):
++when_flag_clicked {
++    go_to_xy(0, 0)
++    repeat (10) {
++        move(10)
++        if (touching("_edge_")) {
++            turn_right(180)
++        } else {
++            change_var($score, 1)
++        }
++    }
++}
++Rules: values go in ( ) separated by commas. Text and menu choices go in "quotes". $name is a variable,
++@name is a list, %name is a custom block input. Maths: + - * / mod. Compare: > < ==. Logic: and or not.
++C blocks (if, repeat, forever, repeat_until, while) use { }. if ... else uses } else {.
++Custom blocks: define "jump %s" (%height) { ... } and call "jump %s" (50).
++Loose commands go in stack { ... }. Comments start with //.`;
++
++const escapeHtml = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
++
++const inlineMarkdown = text => escapeHtml(text)
++    .replace(/`([^`]+)`/g, '<code>$1</code>')
++    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
++    .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<i>$2</i>');
++
++const splitMessage = text => {
++    const parts = [];
++    const re = /```([a-zA-Z]*)\n?([\s\S]*?)(```|$)/g;
++    let last = 0;
++    let m;
++    while ((m = re.exec(text))) {
++        if (m.index > last) parts.push({type: 'text', text: text.slice(last, m.index)});
++        parts.push({type: 'code', lang: m[1], text: m[2].replace(/\n$/, ''), closed: m[3] === '```'});
++        last = re.lastIndex;
++        if (m[0] === '') re.lastIndex++;
++    }
++    if (last < text.length) parts.push({type: 'text', text: text.slice(last)});
++    return parts;
++};
++
++const TextPart = ({text}) => {
++    const lines = text.split('\n');
++    const out = [];
++    let list = null;
++    lines.forEach((line, i) => {
++        const bullet = /^\s*[-*]\s+(.*)$/.exec(line) || /^\s*\d+[.)]\s+(.*)$/.exec(line);
++        if (bullet) {
++            if (!list) {
++                list = [];
++                out.push({type: 'list', items: list, key: i});
++            }
++            list.push(bullet[1]);
++        } else {
++            list = null;
++            if (line.trim()) out.push({type: 'p', text: line.replace(/^#+\s*/, ''), key: i, heading: /^#+\s/.test(line)});
++        }
++    });
++    return (
++        <React.Fragment>
++            {out.map(block => (block.type === 'list' ? (
++                <ul key={block.key}>
++                    {block.items.map((item, j) => (
++                        <li
++                            key={j}
++                            dangerouslySetInnerHTML={{__html: inlineMarkdown(item)}} // eslint-disable-line react/no-danger
++                        />
++                    ))}
++                </ul>
++            ) : (
++                <p
++                    className={block.heading ? styles.heading : null}
++                    key={block.key}
++                    dangerouslySetInnerHTML={{__html: inlineMarkdown(block.text)}} // eslint-disable-line react/no-danger
++                />
++            )))}
++        </React.Fragment>
++    );
++};
++TextPart.propTypes = {text: PropTypes.string};
++
++class DuoPanel extends React.Component {
++    constructor (props) {
++        super(props);
++        this.state = {
++            open: isDuoOpen(),
++            messages: [],
++            input: '',
++            busy: false,
++            error: null,
++            remaining: null,
++            showSettings: false,
++            settings: loadSettings(),
++            serverReady: null,
++            applied: {}
++        };
++        this.listRef = React.createRef();
++        this.inputRef = React.createRef();
++        this.handleSend = this.handleSend.bind(this);
++        this.handleKeyDown = this.handleKeyDown.bind(this);
++        this.handleStop = this.handleStop.bind(this);
++        this.handleNewChat = this.handleNewChat.bind(this);
++        this.handleClose = () => setDuoOpen(false);
++        this.toggleSettings = () => this.setState(s => ({showSettings: !s.showSettings}));
++    }
++    componentDidMount () {
++        this.unsubscribe = onDuoChange(open => {
++            this.setState({open});
++            if (open) setTimeout(() => this.inputRef.current && this.inputRef.current.focus(), 50);
++        });
++        loadConfig().then(c => this.setState({serverReady: !!c.serverUrl}));
++    }
++    componentDidUpdate (prevProps, prevState) {
++        if (prevState.messages !== this.state.messages && this.listRef.current) {
++            this.listRef.current.scrollTop = this.listRef.current.scrollHeight;
++        }
++    }
++    componentWillUnmount () {
++        this.unsubscribe();
++        if (this.abort) this.abort.abort();
++    }
++    updateSetting (key, value) {
++        const settings = {...this.state.settings, [key]: value};
++        saveSettings(settings);
++        this.setState({settings});
++    }
++    buildSystem () {
++        const lines = [
++            'You are Stick Lab Duo, the friendly coding helper inside Stick Lab, a block coding app by Stick Hubs ' +
++            '(based on Scratch 3 and TurboWarp). Many users are kids and beginners: use simple words, be encouraging, ' +
++            'keep answers short (a few sentences or a short list), and keep everything suitable for children.',
++            'Stick Lab has Block coding and Text coding (a switch under the block categories), a Script tab, a Costumes ' +
++            'tab with an Animate button (Flash-style timeline), and saves projects as .sl files. There are no extensions.',
++            'When you write scripts, write them in Stick Lab Text coding inside a ```stick code block, with complete ' +
++            'scripts that each start with a "when" block, so the user can press "Add to my scripts". ' +
++            'Only use commands from the list below. When explaining blocks in words, use their block names.',
++            '',
++            SYNTAX
++        ];
++        const ws = getWorkspace();
++        if (ws && this.props.toolboxXML) {
++            try {
++                const groups = commandList(ws.ScratchBlocks, this.props.toolboxXML);
++                lines.push('', 'Commands available for this sprite (with example values):');
++                for (const group of groups) {
++                    lines.push(`${group.category}: ${group.items.map(i => i.label).join('  |  ')}`);
++                }
++            } catch (e) {
++                // the command list is optional
++            }
++        }
++        const vm = this.props.vm;
++        const target = vm.editingTarget;
++        if (target) {
++            const sprites = vm.runtime.targets.filter(t => t.isOriginal && !t.isStage).map(t => t.getName());
++            lines.push('', `The user is editing: ${target.isStage ? 'the Stage' : `the sprite "${target.getName()}"`}.`);
++            lines.push(`Sprites in the project: ${sprites.join(', ') || 'none'}.`);
++            lines.push(`Costumes of ${target.getName()}: ${target.getCostumes().map(c => c.name).join(', ')}.`);
++            const vars = Object.values(target.variables).concat(
++                target.isStage ? [] : Object.values(vm.runtime.getTargetForStage().variables)
++            ).filter(v => v.type === '' || v.type === 'list').map(v => (v.type === 'list' ? `@${v.name}` : `$${v.name}`));
++            if (vars.length) lines.push(`Variables and lists: ${vars.join(', ')}.`);
++            if (this.state.settings.seeCode && ws) {
++                try {
++                    const code = workspaceToText(ws.workspace, ws.ScratchBlocks).text.trim();
++                    lines.push('', code ? `The user's current scripts for this sprite:\n\`\`\`stick\n${code}\n\`\`\`` :
++                        'This sprite has no scripts yet.');
++                } catch (e) {
++                    // ignore
++                }
++            }
++        }
++        return lines.join('\n');
++    }
++    async handleSend (textOverride) {
++        const text = (typeof textOverride === 'string' ? textOverride : this.state.input).trim();
++        if (!text || this.state.busy) return;
++        const history = this.state.messages.concat({role: 'user', content: text});
++        this.setState({messages: history.concat({role: 'assistant', content: '', pending: true}), input: '',
++            busy: true, error: null});
++        this.abort = new AbortController();
++        try {
++            const result = await sendToDuo({
++                system: this.buildSystem(),
++                messages: history.map(m => ({role: m.role, content: m.content})).slice(-30),
++                settings: this.state.settings,
++                signal: this.abort.signal,
++                onText: partial => this.setState({messages: history.concat({role: 'assistant', content: partial, pending: true})})
++            });
++            this.setState({
++                messages: history.concat({role: 'assistant', content: result.text || '(no answer)'}),
++                busy: false,
++                remaining: result.remaining
++            });
++        } catch (e) {
++            const stopped = e.name === 'AbortError';
++            this.setState(s => {
++                const last = s.messages[s.messages.length - 1];
++                const keep = last && last.content ? s.messages.slice(0, -1).concat({...last, pending: false}) : history;
++                return {
++                    messages: keep,
++                    busy: false,
++                    error: stopped ? null : e.message,
++                    remaining: typeof e.remaining === 'string' ? e.remaining : s.remaining
++                };
++            });
++        }
++        this.abort = null;
++    }
++    handleStop () {
++        if (this.abort) this.abort.abort();
++    }
++    handleNewChat () {
++        this.handleStop();
++        this.setState({messages: [], error: null, applied: {}});
++    }
++    handleKeyDown (e) {
++        if (e.key === 'Enter' && !e.shiftKey) {
++            e.preventDefault();
++            this.handleSend();
++        }
++    }
++    handleAddCode (code, id) {
++        const ws = getWorkspace();
++        if (!ws) {
++            this.setState({error: 'Open the Script tab first, then try again.'});
++            return;
++        }
++        try {
++            const current = workspaceToText(ws.workspace, ws.ScratchBlocks).text;
++            applyText(`${current}\n\n${code}\n`, {
++                ScratchBlocks: ws.ScratchBlocks,
++                workspace: ws.workspace,
++                vm: this.props.vm,
++                toolboxXML: this.props.toolboxXML
++            });
++            this.setState(s => ({applied: {...s.applied, [id]: true}, error: null}));
++        } catch (e) {
++            this.setState({error: `That code didn't fit: ${e.message}. Ask Duo to fix it.`});
++        }
++    }
++    renderMessage (m, i) {
++        if (m.role === 'user') {
++            return (
++                <div
++                    key={i}
++                    className={classNames(styles.bubble, styles.user)}
++                >{m.content}</div>
++            );
++        }
++        const parts = splitMessage(m.content);
++        return (
++            <div
++                key={i}
++                className={classNames(styles.bubble, styles.duo)}
++            >
++                {parts.map((part, j) => {
++                    if (part.type === 'text') {
++                        return (<TextPart
++                            key={j}
++                            text={part.text}
++                        />);
++                    }
++                    const id = `${i}-${j}`;
++                    const canAdd = part.closed && !m.pending && (part.lang === 'stick' || part.lang === '');
++                    return (
++                        <div
++                            key={j}
++                            className={styles.code}
++                        >
++                            <pre>{part.text}</pre>
++                            {canAdd ? (
++                                <button
++                                    className={styles.addButton}
++                                    disabled={this.state.applied[id]}
++                                    onClick={() => this.handleAddCode(part.text, id)} // eslint-disable-line react/jsx-no-bind
++                                >{this.state.applied[id] ? '✓ Added to your scripts' : '+ Add to my scripts'}</button>
++                            ) : null}
++                        </div>
++                    );
++                })}
++                {m.pending && !m.content ? <span className={styles.typing}><i /><i /><i /></span> : null}
++            </div>
++        );
++    }
++    render () {
++        if (!this.state.open) return null;
++        const {messages, input, busy, error, remaining, showSettings, settings, serverReady} = this.state;
++        return (
++            <div
++                aria-label="Stick Lab Duo"
++                className={styles.panel}
++                role="dialog"
++            >
++                <div className={styles.header}>
++                    <span className={styles.logo}>{'✦'}</span>
++                    <span className={styles.titles}>
++                        <span className={styles.title}>{'Stick Lab Duo'}</span>
++                        <span className={styles.subtitle}>{'Claude Opus 5.5'}</span>
++                    </span>
++                    <button
++                        className={styles.headerButton}
++                        title="New chat"
++                        onClick={this.handleNewChat}
++                    >{'New'}</button>
++                    <button
++                        className={classNames(styles.headerButton, {[styles.headerButtonActive]: showSettings})}
++                        title="Duo settings"
++                        onClick={this.toggleSettings}
++                    >{'⚙'}</button>
++                    <button
++                        className={styles.headerButton}
++                        title="Close"
++                        onClick={this.handleClose}
++                    >{'✕'}</button>
++                </div>
++                {showSettings ? (
++                    <div className={styles.settings}>
++                        <div className={styles.settingsTitle}>{'How Duo connects'}</div>
++                        <label className={styles.radio}>
++                            <input
++                                checked={settings.mode === 'server'}
++                                name="duo-mode"
++                                type="radio"
++                                onChange={() => this.updateSetting('mode', 'server')} // eslint-disable-line react/jsx-no-bind
++                            />
++                            <span>
++                                <b>{'Stick Hubs server'}</b>
++                                {serverReady === false ? ' (not switched on yet)' : ' · free daily messages'}
++                            </span>
++                        </label>
++                        <label className={styles.radio}>
++                            <input
++                                checked={settings.mode === 'key'}
++                                name="duo-mode"
++                                type="radio"
++                                onChange={() => this.updateSetting('mode', 'key')} // eslint-disable-line react/jsx-no-bind
++                            />
++                            <span><b>{'My own Anthropic API key'}</b>{' · no daily limit, billed to you'}</span>
++                        </label>
++                        {settings.mode === 'key' ? (
++                            <input
++                                autoComplete="off"
++                                className={styles.field}
++                                placeholder="sk-ant-..."
++                                type="password"
++                                value={settings.apiKey}
++                                onChange={e => this.updateSetting('apiKey', e.target.value.trim())} // eslint-disable-line react/jsx-no-bind
++                            />
++                        ) : (
++                            <React.Fragment>
++                                <div className={styles.fieldLabel}>{'Owner pass (only for the owner\'s device)'}</div>
++                                <input
++                                    autoComplete="off"
++                                    className={styles.field}
++                                    placeholder="Leave empty"
++                                    type="password"
++                                    value={settings.ownerPass}
++                                    onChange={e => this.updateSetting('ownerPass', e.target.value)} // eslint-disable-line react/jsx-no-bind
++                                />
++                            </React.Fragment>
++                        )}
++                        <label className={styles.radio}>
++                            <input
++                                checked={settings.seeCode}
++                                type="checkbox"
++                                onChange={e => this.updateSetting('seeCode', e.target.checked)} // eslint-disable-line react/jsx-no-bind
++                            />
++                            <span>{'Let Duo see the scripts of the sprite I\'m editing'}</span>
++                        </label>
++                        <div className={styles.note}>
++                            {'Keys and passes are saved only in this browser on this device.'}
++                        </div>
++                    </div>
++                ) : null}
++                <div
++                    className={styles.messages}
++                    ref={this.listRef}
++                >
++                    <div className={classNames(styles.bubble, styles.duo)}>
++                        <TextPart text={WELCOME} />
++                    </div>
++                    {messages.length === 0 ? (
++                        <div className={styles.suggestions}>
++                            {SUGGESTIONS.map(s => (
++                                <button
++                                    key={s}
++                                    className={styles.suggestion}
++                                    onClick={() => this.handleSend(s)} // eslint-disable-line react/jsx-no-bind
++                                >{s}</button>
++                            ))}
++                        </div>
++                    ) : null}
++                    {messages.map((m, i) => this.renderMessage(m, i))}
++                    {error ? <div className={styles.error}>{error}</div> : null}
++                </div>
++                <div className={styles.composer}>
++                    <textarea
++                        className={styles.input}
++                        placeholder="Ask Duo anything about your project..."
++                        ref={this.inputRef}
++                        rows={2}
++                        value={input}
++                        onChange={e => this.setState({input: e.target.value})} // eslint-disable-line react/jsx-no-bind
++                        onKeyDown={this.handleKeyDown}
++                    />
++                    {busy ? (
++                        <button
++                            className={classNames(styles.send, styles.stop)}
++                            onClick={this.handleStop}
++                        >{'Stop'}</button>
++                    ) : (
++                        <button
++                            className={styles.send}
++                            disabled={!input.trim()}
++                            onClick={this.handleSend}
++                        >{'Send'}</button>
++                    )}
++                </div>
++                <div className={styles.footer}>
++                    {settings.mode === 'key' ? 'Using your own API key' :
++                        remaining === 'unlimited' ? 'Owner device: unlimited messages' :
++                            remaining !== null ? `${remaining} free message${remaining === '1' ? '' : 's'} left today` :
++                                'Duo can make mistakes. Check its code before you use it.'}
++                </div>
++            </div>
++        );
++    }
++}
++
++DuoPanel.propTypes = {
++    toolboxXML: PropTypes.string,
++    vm: PropTypes.shape({
++        editingTarget: PropTypes.object,
++        runtime: PropTypes.object
++    }).isRequired
++};
++
++const mapStateToProps = state => ({
++    toolboxXML: state.scratchGui.toolbox.toolboxXML
++});
++
++export default connect(mapStateToProps)(DuoPanel);
+diff --git a/src/components/sl-duo/duo-store.js b/src/components/sl-duo/duo-store.js
+new file mode 100644
+index 0000000..65acb46
+--- /dev/null
++++ b/src/components/sl-duo/duo-store.js
+@@ -0,0 +1,21 @@
++// Stick Lab Duo: is the chat panel open?
++let open = false;
++const listeners = new Set();
++
++const isDuoOpen = () => open;
++const setDuoOpen = value => {
++    open = !!value;
++    listeners.forEach(fn => fn(open));
++};
++const toggleDuo = () => setDuoOpen(!open);
++const onDuoChange = fn => {
++    listeners.add(fn);
++    return () => listeners.delete(fn);
++};
++
++export {
++    isDuoOpen,
++    setDuoOpen,
++    toggleDuo,
++    onDuoChange
++};
+diff --git a/src/components/sl-duo/duo.css b/src/components/sl-duo/duo.css
+new file mode 100644
+index 0000000..6b2a49c
+--- /dev/null
++++ b/src/components/sl-duo/duo.css
+@@ -0,0 +1,322 @@
++/* Stick Lab Duo chat panel (Aero style) */
++
++.panel {
++    position: fixed;
++    top: 3.4rem;
++    right: 0.6rem;
++    bottom: 0.6rem;
++    width: 24rem;
++    max-width: calc(100vw - 1.2rem);
++    z-index: 600;
++    display: flex;
++    flex-direction: column;
++    background: #f5f8fc;
++    border: 1px solid #1b4f8f;
++    border-radius: 6px;
++    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6), 0 8px 28px rgba(20, 50, 90, 0.35);
++    font-family: Verdana, Tahoma, "Segoe UI", sans-serif;
++    font-size: 0.78rem;
++    color: #1f3550;
++    overflow: hidden;
++}
++
++.header {
++    display: flex;
++    align-items: center;
++    gap: 0.4rem;
++    padding: 0.45rem 0.55rem;
++    background: linear-gradient(180deg, #a3d2f7 0%, #62a7e8 46%, #2a6ab8 50%, #3283d6 100%);
++    color: #ffffff;
++    border-bottom: 1px solid #1b4f8f;
++}
++
++.logo {
++    width: 1.9rem;
++    height: 1.9rem;
++    display: flex;
++    align-items: center;
++    justify-content: center;
++    border-radius: 50%;
++    background: linear-gradient(180deg, #fff7c2 0%, #f2c94c 50%, #d9a300 51%, #f0c23a 100%);
++    color: #7a4f00;
++    font-size: 1.05rem;
++    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 1px 3px rgba(0, 0, 0, 0.3);
++}
++
++.titles {
++    display: flex;
++    flex-direction: column;
++    line-height: 1.15;
++    margin-right: auto;
++}
++
++.title {
++    font: bold 0.95rem "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
++    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
++}
++
++.subtitle {
++    font-size: 0.65rem;
++    opacity: 0.9;
++}
++
++.header-button {
++    min-width: 1.8rem;
++    height: 1.6rem;
++    padding: 0 0.4rem;
++    border: 1px solid rgba(255, 255, 255, 0.55);
++    border-radius: 3px;
++    background: rgba(255, 255, 255, 0.15);
++    color: #ffffff;
++    font: bold 0.75rem Verdana, sans-serif;
++    cursor: pointer;
++}
++
++.header-button:hover,
++.header-button-active {
++    background: rgba(255, 255, 255, 0.32);
++}
++
++.settings {
++    padding: 0.55rem 0.7rem;
++    background: linear-gradient(180deg, #fdfeff, #eaf1fa);
++    border-bottom: 1px solid #a9bcd3;
++    display: flex;
++    flex-direction: column;
++    gap: 0.35rem;
++}
++
++.settings-title {
++    font-weight: bold;
++    color: #1d4f91;
++}
++
++.radio {
++    display: flex;
++    align-items: flex-start;
++    gap: 0.35rem;
++    line-height: 1.3;
++    cursor: pointer;
++}
++
++.field-label {
++    font-size: 0.7rem;
++    color: #555;
++}
++
++.field {
++    width: 100%;
++    box-sizing: border-box;
++    padding: 0.3rem 0.4rem;
++    border: 1px solid #8ea4c1;
++    border-radius: 3px;
++    font: 0.78rem Consolas, "Courier New", monospace;
++}
++
++.note {
++    font-size: 0.66rem;
++    color: #666;
++}
++
++.messages {
++    flex: 1;
++    min-height: 0;
++    overflow-y: auto;
++    padding: 0.6rem;
++    display: flex;
++    flex-direction: column;
++    gap: 0.5rem;
++    background: linear-gradient(180deg, #eef4fb, #f8fbff);
++}
++
++.bubble {
++    max-width: 92%;
++    padding: 0.45rem 0.6rem;
++    border-radius: 8px;
++    line-height: 1.45;
++    word-wrap: break-word;
++}
++
++.bubble p {
++    margin: 0 0 0.35rem;
++}
++
++.bubble p:last-child {
++    margin-bottom: 0;
++}
++
++.bubble ul {
++    margin: 0.2rem 0 0.35rem;
++    padding-left: 1.1rem;
++}
++
++.bubble code {
++    font-family: Consolas, "Courier New", monospace;
++    background: rgba(29, 79, 145, 0.1);
++    padding: 0 0.2rem;
++    border-radius: 2px;
++}
++
++.heading {
++    font-weight: bold;
++    color: #1d4f91;
++}
++
++.user {
++    align-self: flex-end;
++    white-space: pre-wrap;
++    color: #ffffff;
++    background: linear-gradient(180deg, #6fb0ec 0%, #3b86d4 50%, #2a6ab8 51%, #3a87d6 100%);
++    border: 1px solid #1b4f8f;
++    border-bottom-right-radius: 2px;
++}
++
++.duo {
++    align-self: flex-start;
++    background: #ffffff;
++    border: 1px solid #c3d1e2;
++    border-bottom-left-radius: 2px;
++    box-shadow: 0 1px 2px rgba(30, 70, 120, 0.1);
++}
++
++.code {
++    margin: 0.35rem 0;
++    border: 1px solid #a9bcd3;
++    border-radius: 4px;
++    overflow: hidden;
++}
++
++.code pre {
++    margin: 0;
++    padding: 0.45rem 0.55rem;
++    background: #f3f7fc;
++    font: 0.72rem/1.45 Consolas, "Courier New", monospace;
++    color: #1f3550;
++    overflow-x: auto;
++    white-space: pre;
++}
++
++.add-button {
++    width: 100%;
++    padding: 0.35rem;
++    border: 0;
++    border-top: 1px solid #1e6b2e;
++    background: linear-gradient(180deg, #b6eab0 0%, #6cc35a 45%, #2e8b3e 50%, #44a653 100%);
++    color: #ffffff;
++    font: bold 0.75rem Verdana, sans-serif;
++    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
++    cursor: pointer;
++}
++
++.add-button:disabled {
++    cursor: default;
++    filter: saturate(0.6);
++}
++
++.suggestions {
++    display: flex;
++    flex-direction: column;
++    gap: 0.3rem;
++}
++
++.suggestion {
++    align-self: flex-start;
++    padding: 0.3rem 0.6rem;
++    border: 1px solid #8ea4c1;
++    border-radius: 12px;
++    background: linear-gradient(180deg, #ffffff 0%, #f2f6fb 45%, #dde7f3 50%, #e8eff8 100%);
++    color: #1d4f91;
++    font: 0.72rem Verdana, sans-serif;
++    cursor: pointer;
++}
++
++.suggestion:hover {
++    border-color: #3c7fb1;
++    background: linear-gradient(180deg, #f4faff 0%, #ddf0ff 45%, #bfe0fb 50%, #d4ecfd 100%);
++}
++
++.typing {
++    display: inline-flex;
++    gap: 3px;
++}
++
++.typing i {
++    width: 6px;
++    height: 6px;
++    border-radius: 50%;
++    background: #5ea6e8;
++    animation: duo-blink 1s infinite ease-in-out;
++}
++
++.typing i:nth-child(2) {
++    animation-delay: 0.15s;
++}
++
++.typing i:nth-child(3) {
++    animation-delay: 0.3s;
++}
++
++@keyframes duo-blink {
++    0%, 80%, 100% { opacity: 0.25; }
++    40% { opacity: 1; }
++}
++
++.error {
++    padding: 0.4rem 0.55rem;
++    border: 1px solid #e6b3b3;
++    background: #fdecec;
++    color: #8e1b1b;
++    border-radius: 4px;
++}
++
++.composer {
++    display: flex;
++    gap: 0.4rem;
++    padding: 0.5rem;
++    border-top: 1px solid #a9bcd3;
++    background: linear-gradient(180deg, #fdfeff 0%, #ebf2fb 45%, #d6e4f5 50%, #e3edf9 100%);
++}
++
++.input {
++    flex: 1;
++    resize: none;
++    padding: 0.35rem 0.45rem;
++    border: 1px solid #8ea4c1;
++    border-radius: 4px;
++    font: 0.78rem Verdana, Tahoma, sans-serif;
++    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
++}
++
++.input:focus {
++    outline: none;
++    border-color: #2a6ab8;
++    box-shadow: 0 0 0 2px rgba(42, 106, 184, 0.25);
++}
++
++.send {
++    padding: 0 0.9rem;
++    border: 1px solid #1b4f8f;
++    border-radius: 4px;
++    background: linear-gradient(180deg, #9fd0f7 0%, #5ea6e8 45%, #2a6ab8 50%, #3a87d6 100%);
++    color: #ffffff;
++    font: bold 0.8rem Verdana, sans-serif;
++    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
++    cursor: pointer;
++}
++
++.send:disabled {
++    opacity: 0.55;
++    cursor: default;
++}
++
++.stop {
++    border-color: #8e1b1b;
++    background: linear-gradient(180deg, #f5a3a3 0%, #e05a5a 45%, #b82626 50%, #d04242 100%);
++}
++
++.footer {
++    padding: 0.25rem 0.6rem 0.35rem;
++    font-size: 0.65rem;
++    color: #5a6b80;
++    background: #e3edf9;
 +}
 diff --git a/src/components/sl-text-code/code-mode-store.js b/src/components/sl-text-code/code-mode-store.js
 new file mode 100644
@@ -3221,6 +4082,139 @@ index 0000000..b3681f7
 +install();
 +
 +export default install;
+diff --git a/src/lib/sl-duo/duo-client.js b/src/lib/sl-duo/duo-client.js
+new file mode 100644
+index 0000000..75e4e56
+--- /dev/null
++++ b/src/lib/sl-duo/duo-client.js
+@@ -0,0 +1,127 @@
++// Stick Lab Duo: talks to Claude Opus 5.5, through the Stick Hubs Duo server or the user's own API key.
++
++const MODEL = 'claude-opus-5-5';
++const STORAGE_KEY = 'stick-lab-duo-settings';
++
++const loadSettings = () => {
++    try {
++        return {mode: 'server', apiKey: '', ownerPass: '', seeCode: true, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')};
++    } catch (e) {
++        return {mode: 'server', apiKey: '', ownerPass: '', seeCode: true};
++    }
++};
++
++const saveSettings = settings => {
++    try {
++        localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
++    } catch (e) {
++        // storage blocked: settings last until the page closes
++    }
++};
++
++let configPromise = null;
++const loadConfig = () => {
++    if (!configPromise) {
++        configPromise = fetch('duo-config.json', {cache: 'no-cache'})
++            .then(r => (r.ok ? r.json() : {}))
++            .catch(() => ({}));
++    }
++    return configPromise;
++};
++
++/**
++ * Read a Claude streaming response and call onText with each new piece of text.
++ * @returns {Promise<string>} the whole reply
++ */
++const readStream = async (response, onText) => {
++    const reader = response.body.getReader();
++    const decoder = new TextDecoder();
++    let buffer = '';
++    let full = '';
++    for (;;) {
++        const {done, value} = await reader.read();
++        if (done) break;
++        buffer += decoder.decode(value, {stream: true});
++        let split;
++        while ((split = buffer.indexOf('\n\n')) !== -1) {
++            const event = buffer.slice(0, split);
++            buffer = buffer.slice(split + 2);
++            for (const line of event.split('\n')) {
++                if (!line.startsWith('data:')) continue;
++                let data;
++                try {
++                    data = JSON.parse(line.slice(5).trim());
++                } catch (e) {
++                    continue;
++                }
++                if (data.type === 'content_block_delta' && data.delta && data.delta.type === 'text_delta') {
++                    full += data.delta.text;
++                    onText(full);
++                } else if (data.type === 'error') {
++                    throw new Error((data.error && data.error.message) || 'Claude had a problem. Try again.');
++                }
++            }
++        }
++    }
++    return full;
++};
++
++const errorFrom = async response => {
++    try {
++        const body = await response.json();
++        return (body.error && (body.error.message || body.error)) || `Error ${response.status}`;
++    } catch (e) {
++        return `Error ${response.status}`;
++    }
++};
++
++/**
++ * Send a conversation to Duo.
++ * @param {{system: string, messages: Array, settings: object, onText: Function, signal: AbortSignal}} options
++ * @returns {Promise<{text: string, remaining: ?string}>} reply
++ */
++const sendToDuo = async ({system, messages, settings, onText, signal}) => {
++    if (settings.mode === 'key') {
++        if (!settings.apiKey) throw new Error('Add your Anthropic API key in Duo settings first.');
++        const response = await fetch('https://api.anthropic.com/v1/messages', {
++            method: 'POST',
++            signal,
++            headers: {
++                'content-type': 'application/json',
++                'x-api-key': settings.apiKey,
++                'anthropic-version': '2023-06-01',
++                'anthropic-dangerous-direct-browser-access': 'true'
++            },
++            body: JSON.stringify({model: MODEL, max_tokens: 2048, system, messages, stream: true})
++        });
++        if (!response.ok) throw new Error(await errorFrom(response));
++        return {text: await readStream(response, onText), remaining: null};
++    }
++    const config = await loadConfig();
++    if (!config.serverUrl) {
++        throw new Error('The Stick Hubs Duo server isn\'t switched on yet. You can add your own Anthropic API key in Duo settings.');
++    }
++    const headers = {'content-type': 'application/json'};
++    if (settings.ownerPass) headers['x-duo-owner'] = settings.ownerPass;
++    const response = await fetch(`${config.serverUrl.replace(/\/$/, '')}/chat`, {
++        method: 'POST',
++        signal,
++        headers,
++        body: JSON.stringify({system, messages})
++    });
++    const remaining = response.headers.get('x-duo-remaining');
++    if (!response.ok) {
++        const error = new Error(await errorFrom(response));
++        error.remaining = remaining;
++        throw error;
++    }
++    return {text: await readStream(response, onText), remaining};
++};
++
++export {
++    MODEL,
++    loadSettings,
++    saveSettings,
++    loadConfig,
++    sendToDuo
++};
 diff --git a/src/lib/sl-format.js b/src/lib/sl-format.js
 new file mode 100644
 index 0000000..e6b14ca
@@ -5045,6 +6039,15 @@ index 2951caf..11d78a2 100644
  import storage from '../lib/storage';
  import {MAXIMUM_CLOUD_VARIABLES} from '../lib/tw-cloud-limits';
  
+diff --git a/static/duo-config.json b/static/duo-config.json
+new file mode 100644
+index 0000000..2983eb4
+--- /dev/null
++++ b/static/duo-config.json
+@@ -0,0 +1,3 @@
++{
++  "serverUrl": ""
++}
 diff --git a/webpack.config.js b/webpack.config.js
 index f9df336..9324893 100644
 --- a/webpack.config.js
