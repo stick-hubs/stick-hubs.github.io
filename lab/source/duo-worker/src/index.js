@@ -4,7 +4,8 @@
 //   ANTHROPIC_API_KEY  your Anthropic API key (never put it in the website's code)
 //   OWNER_PASS         a long secret phrase; a device that sends it has no daily limit
 // Variables (wrangler.toml [vars]):
-//   DAILY_LIMIT        messages per person per day for everyone else (default 30)
+//   DAILY_LIMIT        messages per person per day for everyone else (default 10)
+//   GLOBAL_DAILY_LIMIT messages per day for everyone together, so the bill can't run away (default 200)
 // KV namespace binding:
 //   DUO_KV             stores each person's message count for the day
 
@@ -74,23 +75,39 @@ export default {
             return json(400, {error: 'That conversation is too long. Start a new chat.'}, cors);
         }
 
-        // Daily limit, unless this is the owner's device.
+        // Daily limits, unless this is the owner's device:
+        // each person gets DAILY_LIMIT messages, and everyone together gets GLOBAL_DAILY_LIMIT.
         const isOwner = sameSecret(request.headers.get('x-duo-owner') || '', env.OWNER_PASS || '');
-        const limit = Math.max(1, parseInt(env.DAILY_LIMIT || '30', 10));
+        const limit = Math.max(1, parseInt(env.DAILY_LIMIT || '10', 10));
+        const globalLimit = Math.max(1, parseInt(env.GLOBAL_DAILY_LIMIT || '200', 10));
         let remaining = 'unlimited';
         if (!isOwner) {
             const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
             const day = new Date().toISOString().slice(0, 10);
             const key = `count:${day}:${ip}`;
-            const used = parseInt((await env.DUO_KV.get(key)) || '0', 10);
+            const globalKey = `total:${day}`;
+            const [usedText, totalText] = await Promise.all([env.DUO_KV.get(key), env.DUO_KV.get(globalKey)]);
+            const used = parseInt(usedText || '0', 10);
+            const total = parseInt(totalText || '0', 10);
             if (used >= limit) {
                 return json(429, {
                     error: `You've used all ${limit} Duo messages for today. Come back tomorrow, ` +
                         'or add your own Anthropic API key in Duo settings.'
                 }, {...cors, 'x-duo-remaining': '0', 'x-duo-limit': String(limit)});
             }
-            await env.DUO_KV.put(key, String(used + 1), {expirationTtl: 60 * 60 * 30});
-            remaining = String(limit - used - 1);
+            if (total >= globalLimit) {
+                return json(429, {
+                    error: 'Duo is resting: everyone together has used today\'s free messages. ' +
+                        'Try again tomorrow, or add your own Anthropic API key in Duo settings.'
+                }, {...cors, 'x-duo-remaining': '0', 'x-duo-limit': String(limit)});
+            }
+            const ttl = {expirationTtl: 60 * 60 * 30};
+            // Counting is best effort: if the counter store is briefly busy, the message still goes through.
+            await Promise.all([
+                env.DUO_KV.put(key, String(used + 1), ttl).catch(() => null),
+                env.DUO_KV.put(globalKey, String(total + 1), ttl).catch(() => null)
+            ]);
+            remaining = String(Math.min(limit - used - 1, globalLimit - total - 1));
         }
 
         const upstream = await fetch('https://api.anthropic.com/v1/messages', {

@@ -4,7 +4,9 @@ compatibility_date = "2026-11-01"
 
 [vars]
 # Messages per person per day. The owner pass has no limit.
-DAILY_LIMIT = "30"
+DAILY_LIMIT = "10"
+# Messages per day for everyone together (keeps your Anthropic bill in check).
+GLOBAL_DAILY_LIMIT = "200"
 
 # Create it with: npx wrangler kv namespace create DUO_KV
 # then paste the id it prints here.

@@ -1,8 +1,8 @@
 # Stick Lab Duo server
 
 Stick Lab Duo talks to Claude Opus 5.5 through this small Cloudflare Worker, so your Anthropic
-API key is never in the website's code. Everyone gets a few free messages a day (DAILY_LIMIT);
-a device with your owner pass has no limit.
+API key is never in the website's code. Each person gets DAILY_LIMIT free messages a day (default 10),
+everyone together gets GLOBAL_DAILY_LIMIT a day (default 200), and a device with your owner pass has no limit.
 
 ## Set it up (about 10 minutes)
 
@@ -23,5 +23,7 @@ You need a free Cloudflare account and an Anthropic API key (console.anthropic.c
    `{ "serverUrl": "https://stick-lab-duo.YOURNAME.workers.dev" }`
 6. On your own device, open Stick Lab, click Duo, then the gear, and type your owner pass.
 
-Change `DAILY_LIMIT` in `wrangler.toml` (then deploy again) to give everyone more or fewer messages.
+Change `DAILY_LIMIT` (per person) or `GLOBAL_DAILY_LIMIT` (everyone together) in `wrangler.toml` and deploy again,
+or edit them in the Cloudflare dashboard under Settings -> Variables and Secrets.
+At about $0.03-0.05 per message, 200 messages a day is roughly $6-10 a day at most.
 Every message is billed to your Anthropic account, so set a monthly spend limit in the Anthropic console.
