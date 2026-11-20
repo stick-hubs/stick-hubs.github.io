@@ -130,3 +130,117 @@ footer a.v16 { background: #e4edf8; color: var(--c-blue); border: 1px solid var(
 
 /* buttons used inline inside sentences */
 p .btn, p a.btn, .intro .btn { padding: 1px 6px; font-size: 12px; vertical-align: baseline; }
+
+/* ==========================================================
+   Aero layer (Windows 7 style): glass frame, glossy split
+   gradients, soft glow. Same layout as the classic theme.
+   ========================================================== */
+:root {
+  --aero-btn: linear-gradient(180deg, #ffffff 0%, #f2f6fb 45%, #dde7f3 50%, #e8eff8 100%);
+  --aero-btn-hover: linear-gradient(180deg, #f4faff 0%, #ddf0ff 45%, #bfe0fb 50%, #d4ecfd 100%);
+  --aero-blue: linear-gradient(180deg, #9fd0f7 0%, #5ea6e8 45%, #2a6ab8 50%, #3a87d6 100%);
+  --aero-blue-hover: linear-gradient(180deg, #b5dcfa 0%, #75b4ee 45%, #3577c6 50%, #4a95e0 100%);
+  --aero-glass: linear-gradient(180deg, rgba(255,255,255,.92) 0%, rgba(244,248,253,.88) 100%);
+  --aero-shine: inset 0 1px 0 rgba(255,255,255,.9);
+}
+
+html {
+  background:
+    radial-gradient(ellipse 70% 55% at 50% -5%, rgba(205,235,255,.95), rgba(205,235,255,0) 70%),
+    radial-gradient(ellipse 60% 40% at 15% 100%, rgba(150,210,255,.55), rgba(150,210,255,0) 70%),
+    linear-gradient(180deg, #2b6cb5 0%, #4b8fd6 38%, #7ab6ea 70%, #a9d2f3 100%);
+  background-attachment: fixed;
+  min-height: 100%;
+}
+body { background: transparent; }
+
+/* glass window frame around the whole page */
+.sm-side, .sm-page {
+  border-color: rgba(255,255,255,.75);
+  box-shadow: 0 0 0 1px rgba(20,60,110,.35);
+}
+.sm-side {
+  border-radius: 8px 8px 0 0;
+  background: var(--aero-glass);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.sm-page {
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 0 0 1px rgba(20,60,110,.35), 0 10px 30px rgba(10,40,90,.35);
+}
+
+/* glossy blue menu bar */
+.sm-side .sm-nav {
+  background: linear-gradient(180deg, #a3d2f7 0%, #62a7e8 46%, #2a6ab8 50%, #3283d6 100%);
+  border-top: 1px solid #1b4f8f;
+  border-bottom: 1px solid #1b4f8f;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.55);
+}
+.sm-link { color: #ffffff; border-left-color: rgba(255,255,255,.35); text-shadow: 0 1px 1px rgba(0,0,0,.35); }
+.sm-link:hover { color: #ffffff; background: rgba(255,255,255,.18); text-decoration: none; border-radius: 3px; }
+.sm-link[aria-current="page"] {
+  color: #1d4f91; text-shadow: none; border-radius: 3px;
+  background: var(--aero-btn);
+  box-shadow: var(--aero-shine), 0 0 6px rgba(255,255,255,.7);
+}
+.sm-brand b { text-shadow: 0 1px 0 #ffffff, 0 2px 6px rgba(42,106,184,.25); }
+
+/* buttons: Aero split gradients */
+.btn, a.btn, .vbtn, .watch, .copy button {
+  background: var(--aero-btn);
+  border-color: #8ea4c1;
+  box-shadow: var(--aero-shine), 0 1px 2px rgba(20,60,110,.15);
+  border-radius: 4px;
+}
+.btn:hover, .vbtn:hover, .watch:hover {
+  background: var(--aero-btn-hover);
+  border-color: #3c7fb1;
+  box-shadow: var(--aero-shine), 0 0 8px rgba(94,166,232,.55);
+}
+.btn.play, .card .btn.play, .sm-side .sm-cta {
+  background: var(--aero-blue);
+  border-color: #1b4f8f;
+  color: #ffffff;
+  text-shadow: 0 1px 1px rgba(0,0,0,.35);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 1px 3px rgba(20,60,110,.3);
+}
+.btn.play:hover, .sm-side .sm-cta:hover {
+  background: var(--aero-blue-hover);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 0 10px rgba(94,166,232,.7);
+}
+.btn.ghost { background: var(--aero-btn); }
+.btn.live { background: linear-gradient(180deg, #f8a3ab 0%, #e8505e 45%, #b81f2e 50%, #d4394a 100%); }
+
+/* panels and cards: glass with a soft shine */
+.card, .tile, .topic, .unit, .chapter, .ver, .ctrl, .steps li, .tv-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f6f9fd 100%);
+  border-color: #b9cbe0;
+  border-radius: 6px;
+  box-shadow: var(--aero-shine), 0 1px 3px rgba(20,60,110,.12);
+}
+.tile:hover, .card:hover {
+  border-color: #6aa4dc;
+  box-shadow: var(--aero-shine), 0 0 10px rgba(94,166,232,.4);
+}
+.card img { border-radius: 5px 5px 0 0; }
+.hero { background: linear-gradient(180deg, #ffffff 0%, #eaf3fc 55%, #dbe9f7 100%); }
+.hero h1, section h2, h3 { text-shadow: 0 1px 0 #ffffff; }
+.eyebrow, .tag {
+  background: var(--aero-blue); color: #ffffff; border-color: #1b4f8f; border-radius: 10px;
+  text-shadow: 0 1px 1px rgba(0,0,0,.3); box-shadow: inset 0 1px 0 rgba(255,255,255,.55);
+}
+.band { background: linear-gradient(180deg, #f3f8fd, #e8f0fa); }
+footer {
+  background: linear-gradient(180deg, #fdfeff 0%, #ebf2fb 45%, #d6e4f5 50%, #e3edf9 100%);
+  border-radius: 0 0 8px 8px;
+}
+
+@media (max-width: 820px) {
+  .sm-side, .sm-page, footer { border-radius: 0; }
+}
+
+/* keep the language button clear of the Play button in the header */
+@media (min-width: 821px) {
+  .sm-side .sm-cta { margin-right: 96px; }
+}
