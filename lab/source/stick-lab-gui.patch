@@ -188,7 +188,7 @@ index 444e77c..ccb2758 100644
 +    text-shadow: 0 0 4px rgba(255, 220, 90, 0.8);
 +}
 diff --git a/src/components/menu-bar/menu-bar.jsx b/src/components/menu-bar/menu-bar.jsx
-index 6caddb5..7194815 100644
+index 6caddb5..9418d2a 100644
 --- a/src/components/menu-bar/menu-bar.jsx
 +++ b/src/components/menu-bar/menu-bar.jsx
 @@ -96,6 +96,8 @@ import editIcon from './icon--edit.svg';
@@ -217,7 +217,7 @@ index 6caddb5..7194815 100644
 +                                draggable={false}
 +                                src={stickLabLogo}
 +                            />
-+                            <span className={styles.stickLabName}>{'Stick Lab'}<span className={styles.stickLabVersion}>{' 1.1'}</span></span>
++                            <span className={styles.stickLabName}>{'Stick Lab'}<span className={styles.stickLabVersion}>{' 1.2'}</span></span>
 +                        </a>
 +                        <button
 +                            className={classNames(styles.menuBarItem, styles.hoverable, styles.duoButton)}
@@ -270,15 +270,16 @@ index 4ebb5b4..7d881aa 100644
          description: 'Name of the red color scheme, used by TurboWarp by default.',
 diff --git a/src/components/sl-animate/animate-editor.jsx b/src/components/sl-animate/animate-editor.jsx
 new file mode 100644
-index 0000000..bcaea94
+index 0000000..d93cae3
 --- /dev/null
 +++ b/src/components/sl-animate/animate-editor.jsx
-@@ -0,0 +1,994 @@
+@@ -0,0 +1,1214 @@
 +// Stick Lab Animate: a Flash-style frame-by-frame animation editor for a sprite's costumes.
 +import React from 'react';
 +import PropTypes from 'prop-types';
 +import classNames from 'classnames';
 +import styles from './animate.css';
++import * as Rig from './stick-rig';
 +
 +const W = 960; // frames are drawn at 2x stage size
 +const H = 720;
@@ -301,11 +302,16 @@ index 0000000..bcaea94
 +    {id: 'rect', label: 'Rectangle', key: 'r', icon: 'M4 6 H20 V18 H4 Z'},
 +    {id: 'ellipse', label: 'Ellipse', key: 'o', icon: 'M12 5 C 20 5, 20 19, 12 19 C 4 19, 4 5, 12 5 Z'},
 +    {id: 'fill', label: 'Fill', key: 'f', icon: 'M5 12 L12 5 L19 12 L12 19 Z M19 14 C 21 17, 17 17, 19 14'},
++    {id: 'stick', label: 'Pose stickmen', key: 's', icon: 'M12 7 m-3 0 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0 M12 10 V15 M12 12 L7 14 M12 12 L17 10 M12 15 L8 21 M12 15 L16 21'},
 +    {id: 'move', label: 'Move frame', key: 'm', icon: 'M12 3 V21 M3 12 H21 M12 3 L9 6 M12 3 L15 6 M12 21 L9 18 M12 21 L15 18'},
 +    {id: 'picker', label: 'Pick colour', key: 'i', icon: 'M5 19 L13 11 M11 9 L15 13 M14 6 L18 10 L20 8 L16 4 Z'}
 +];
 +
 +let nextKey = 1;
++
++// Lets Animate reopen with stickmen still poseable during this session.
++const sessionCache = new Map(); // target id -> {signature, frames, rigs, poses}
++const costumeSignature = target => target.getCostumes().map(c => `${c.name}:${c.assetId}`).join('|');
 +
 +const makeCanvas = (w = W, h = H) => {
 +    const c = document.createElement('canvas');
@@ -403,11 +409,15 @@ index 0000000..bcaea94
 +            loop: true,
 +            addScript: true,
 +            tweenCount: 4,
++            rigVersion: 0,
++            selectedRig: null,
 +            loading: true,
 +            saving: false,
 +            message: null
 +        };
-+        this.canvases = new Map(); // frame key -> canvas
++        this.canvases = new Map(); // frame key -> canvas (drawing only)
++        this.rigs = []; // stickmen
++        this.poses = new Map(); // frame key -> Map(rig id -> pose)
 +        this.undoStack = [];
 +        this.redoStack = [];
 +        this.viewRef = React.createRef();
@@ -424,6 +434,11 @@ index 0000000..bcaea94
 +        this.deleteFrame = this.deleteFrame.bind(this);
 +        this.undo = this.undo.bind(this);
 +        this.tween = this.tween.bind(this);
++        this.recolorStickman = this.recolorStickman.bind(this);
++        this.toggleSword = this.toggleSword.bind(this);
++        this.flipStickman = this.flipStickman.bind(this);
++        this.deleteStickman = this.deleteStickman.bind(this);
++        this.addStickman = this.addStickman.bind(this);
 +        this.redo = this.redo.bind(this);
 +    }
 +    componentDidMount () {
@@ -432,7 +447,8 @@ index 0000000..bcaea94
 +    }
 +    componentDidUpdate (prevProps, prevState) {
 +        if (prevState.current !== this.state.current || prevState.onion !== this.state.onion ||
-+            prevState.frames !== this.state.frames) {
++            prevState.frames !== this.state.frames || prevState.rigVersion !== this.state.rigVersion ||
++            prevState.tool !== this.state.tool || prevState.selectedRig !== this.state.selectedRig) {
 +            this.renderView();
 +        }
 +    }
@@ -447,6 +463,25 @@ index 0000000..bcaea94
 +        const target = this.props.vm.editingTarget;
 +        if (!target) return;
 +        const costumes = target.getCostumes();
++        const cached = sessionCache.get(target.id);
++        if (cached && cached.signature === costumeSignature(target) && cached.frames.length === costumes.length) {
++            this.rigs = cached.rigs.map(r => ({...r}));
++            const frames = cached.frames.map((f, i) => {
++                const key = nextKey++;
++                const canvas = makeCanvas();
++                canvas.getContext('2d').drawImage(f.canvas, 0, 0);
++                this.canvases.set(key, canvas);
++                this.poses.set(key, new Map(Array.from(f.poses.entries()).map(([id, pose]) => [id, Rig.clonePose(pose)])));
++                return {key, name: costumes[i].name, source: costumes[i], dirty: false, thumb: null};
++            });
++            frames.forEach(f => {
++                f.thumb = this.makeThumb(f.key);
++            });
++            const current = Math.max(0, Math.min(target.currentCostume, frames.length - 1));
++            this.setState({frames, current, loading: false, selectedRig: this.rigs.length ? this.rigs[0].id : null,
++                message: this.rigs.length ? 'Your stickmen are still poseable.' : null}, () => this.renderView());
++            return;
++        }
 +        const frames = costumes.map(costume => ({
 +            key: nextKey++,
 +            name: costume.name,
@@ -494,10 +529,33 @@ index 0000000..bcaea94
 +        });
 +    }
 +
++    drawRigs (ctx, key, options = {}) {
++        const poses = this.poses.get(key);
++        if (!poses) return;
++        for (const rig of this.rigs) {
++            const pose = poses.get(rig.id);
++            if (pose) {
++                Rig.draw(ctx, rig, pose, {
++                    tint: options.tint,
++                    handles: options.handles,
++                    selected: options.handles && rig.id === this.state.selectedRig
++                });
++            }
++        }
++    }
++
++    composite (key) {
++        const canvas = makeCanvas();
++        const ctx = canvas.getContext('2d');
++        ctx.drawImage(this.canvases.get(key), 0, 0);
++        this.drawRigs(ctx, key);
++        return canvas;
++    }
++
 +    makeThumb (key) {
 +        const thumb = makeCanvas(THUMB_W, THUMB_H);
 +        const ctx = thumb.getContext('2d');
-+        ctx.drawImage(this.canvases.get(key), 0, 0, THUMB_W, THUMB_H);
++        ctx.drawImage(this.composite(key), 0, 0, THUMB_W, THUMB_H);
 +        return thumb.toDataURL();
 +    }
 +
@@ -525,6 +583,7 @@ index 0000000..bcaea94
 +        } else {
 +            ctx.drawImage(src, 0, 0);
 +        }
++        this.drawRigs(ctx, frame.key, {handles: !playing && this.state.tool === 'stick'});
 +        if (preview && preview.shape) this.drawShape(ctx, preview.shape);
 +        if (!playing) {
 +            // stage centre marker, like the paint editor
@@ -546,6 +605,7 @@ index 0000000..bcaea94
 +        t.globalCompositeOperation = 'source-over';
 +        t.clearRect(0, 0, W, H);
 +        t.drawImage(this.canvases.get(frame.key), 0, 0);
++        this.drawRigs(t, frame.key);
 +        t.globalCompositeOperation = 'source-atop';
 +        t.fillStyle = tint;
 +        t.globalAlpha = 0.55;
@@ -586,9 +646,14 @@ index 0000000..bcaea94
 +
 +    // ------------------------------------------------------------------ undo
 +
-+    pushUndo (key) {
++    copyPoses (key) {
++        const poses = this.poses.get(key);
++        return poses ? new Map(Array.from(poses.entries()).map(([id, p]) => [id, Rig.clonePose(p)])) : null;
++    }
++
++    pushUndo (key, poseOnly) {
 +        const ctx = this.canvases.get(key).getContext('2d');
-+        this.undoStack.push({key, data: ctx.getImageData(0, 0, W, H)});
++        this.undoStack.push({key, data: poseOnly ? null : ctx.getImageData(0, 0, W, H), poses: this.copyPoses(key)});
 +        if (this.undoStack.length > MAX_UNDO) this.undoStack.shift();
 +        this.redoStack = [];
 +    }
@@ -597,8 +662,11 @@ index 0000000..bcaea94
 +        const entry = from.pop();
 +        if (!entry || !this.canvases.has(entry.key)) return;
 +        const ctx = this.canvases.get(entry.key).getContext('2d');
-+        to.push({key: entry.key, data: ctx.getImageData(0, 0, W, H)});
-+        ctx.putImageData(entry.data, 0, 0);
++        to.push({key: entry.key, data: entry.data ? ctx.getImageData(0, 0, W, H) : null, poses: this.copyPoses(entry.key)});
++        if (entry.data) ctx.putImageData(entry.data, 0, 0);
++        if (entry.poses) this.poses.set(entry.key, entry.poses);
++        else this.poses.delete(entry.key);
++        this.setState(st => ({rigVersion: st.rigVersion + 1}));
 +        const index = this.state.frames.findIndex(f => f.key === entry.key);
 +        this.markDirty(entry.key, index >= 0 ? index : this.state.current);
 +    }
@@ -634,6 +702,27 @@ index 0000000..bcaea94
 +        const p = this.toCanvas(e);
 +        const {tool, color, size} = this.state;
 +        const ctx = this.canvases.get(frame.key).getContext('2d');
++        if (tool === 'stick') {
++            const poses = this.poses.get(frame.key);
++            let hit = null;
++            if (poses) {
++                for (let r = this.rigs.length - 1; r >= 0 && !hit; r--) {
++                    const rig = this.rigs[r];
++                    const pose = poses.get(rig.id);
++                    const handle = pose && Rig.hitTest(rig, pose, p.x, p.y, 22);
++                    if (handle) hit = {rig, handle};
++                }
++            }
++            if (!hit) {
++                this.setState({selectedRig: null});
++                return;
++            }
++            this.pushUndo(frame.key, true);
++            this.drag = {tool, rigId: hit.rig.id, handle: hit.handle, key: frame.key, x0: p.x, y0: p.y,
++                start: Rig.clonePose(poses.get(hit.rig.id))};
++            this.setState({selectedRig: hit.rig.id});
++            return;
++        }
 +        if (tool === 'picker') {
 +            const d = ctx.getImageData(Math.min(W - 1, Math.max(0, p.x)), Math.min(H - 1, Math.max(0, p.y)), 1, 1).data;
 +            if (d[3] > 0) this.setState({color: rgbToHex(d[0], d[1], d[2]), tool: 'pencil'});
@@ -667,6 +756,19 @@ index 0000000..bcaea94
 +        const {color, size, filled} = this.state;
 +        d.x1 = p.x;
 +        d.y1 = p.y;
++        if (d.tool === 'stick') {
++            const poses = this.poses.get(d.key);
++            if (d.handle === 'hip') {
++                const moved = Rig.clonePose(d.start);
++                moved.x += p.x - d.x0;
++                moved.y += p.y - d.y0;
++                poses.set(d.rigId, moved);
++            } else {
++                poses.set(d.rigId, Rig.aimBone(poses.get(d.rigId), d.handle, p.x, p.y));
++            }
++            this.renderView();
++            return;
++        }
 +        if (d.tool === 'pencil' || d.tool === 'eraser') {
 +            const ctx = this.canvases.get(d.key).getContext('2d');
 +            ctx.save();
@@ -720,6 +822,9 @@ index 0000000..bcaea94
 +        const canvas = makeCanvas();
 +        if (fromKey) canvas.getContext('2d').drawImage(this.canvases.get(fromKey), 0, 0);
 +        this.canvases.set(key, canvas);
++        // stickmen carry on into new frames, in the same pose
++        const here = frames[current] && this.copyPoses(frames[current].key);
++        if (here) this.poses.set(key, here);
 +        const frame = {key, name: null, source: null, dirty: true, thumb: null};
 +        frame.thumb = this.makeThumb(key);
 +        const next = frames.slice();
@@ -817,11 +922,82 @@ index 0000000..bcaea94
 +            ctx.drawImage(srcB, -dx * (1 - t), -dy * (1 - t));
 +            ctx.globalAlpha = 1;
 +            this.canvases.set(key, canvas);
++            const pa = this.poses.get(a.key);
++            const pb = this.poses.get(b.key);
++            if (pa) {
++                const poses = new Map();
++                for (const [id, poseA] of pa) {
++                    const poseB = pb && pb.get(id);
++                    poses.set(id, poseB ? Rig.lerpPose(poseA, poseB, t) : Rig.clonePose(poseA));
++                }
++                this.poses.set(key, poses);
++            }
 +            made.push({key, name: null, source: null, dirty: true, thumb: this.makeThumb(key)});
 +        }
 +        const next = frames.slice();
 +        next.splice(current + 1, 0, ...made);
 +        this.setState({frames: next, message: `Added ${count} tween frame${count === 1 ? '' : 's'}.`});
++    }
++
++    // ------------------------------------------------------------------ stickmen
++
++    markAllDirty () {
++        const frames = this.state.frames.map(f => ({...f, dirty: true, thumb: this.makeThumb(f.key)}));
++        this.setState(st => ({frames, rigVersion: st.rigVersion + 1}));
++    }
++
++    addStickman () {
++        const {frames, current} = this.state;
++        if (!frames.length) return;
++        const offset = (this.rigs.length % 4) * 70;
++        const {rig, pose} = Rig.makeRig(CX - 120 + offset * 2, CY + 110, {color: this.state.color});
++        this.rigs.push(rig);
++        for (const f of frames) {
++            if (!this.poses.has(f.key)) this.poses.set(f.key, new Map());
++            this.poses.get(f.key).set(rig.id, Rig.clonePose(pose));
++        }
++        this.setState({selectedRig: rig.id, tool: 'stick',
++            message: 'Drag the red dots to pose. Drag the orange dot to move. New frames keep the pose.'},
++        () => this.markAllDirty());
++        void current;
++    }
++
++    selected () {
++        return this.rigs.find(r => r.id === this.state.selectedRig) || null;
++    }
++
++    deleteStickman () {
++        const rig = this.selected();
++        if (!rig) return;
++        this.rigs = this.rigs.filter(r => r !== rig);
++        for (const poses of this.poses.values()) poses.delete(rig.id);
++        this.setState({selectedRig: null}, () => this.markAllDirty());
++    }
++
++    flipStickman () {
++        const rig = this.selected();
++        const frame = this.currentFrame();
++        if (!rig || !frame) return;
++        const poses = this.poses.get(frame.key);
++        if (!poses || !poses.get(rig.id)) return;
++        this.pushUndo(frame.key, true);
++        poses.set(rig.id, Rig.mirrorPose(poses.get(rig.id)));
++        this.markDirty(frame.key);
++        this.setState(st => ({rigVersion: st.rigVersion + 1}));
++    }
++
++    toggleSword () {
++        const rig = this.selected();
++        if (!rig) return;
++        rig.sword = !rig.sword;
++        this.markAllDirty();
++    }
++
++    recolorStickman () {
++        const rig = this.selected();
++        if (!rig) return;
++        rig.color = this.state.color;
++        this.markAllDirty();
 +    }
 +
 +    // ------------------------------------------------------------------ playback
@@ -896,7 +1072,7 @@ index 0000000..bcaea94
 +    // ------------------------------------------------------------------ saving
 +
 +    frameBlob (key) {
-+        return new Promise(resolve => this.canvases.get(key).toBlob(resolve, 'image/png'));
++        return new Promise(resolve => this.composite(key).toBlob(resolve, 'image/png'));
 +    }
 +
 +    async handleSave () {
@@ -922,7 +1098,7 @@ index 0000000..bcaea94
 +                } else if (frame.source && target.getCostumes().indexOf(frame.source) !== -1 &&
 +                    !desired.includes(frame.source)) {
 +                    const index = target.getCostumes().indexOf(frame.source);
-+                    vm.updateBitmap(index, canvas.getContext('2d').getImageData(0, 0, W, H), CX, CY, 2);
++                    vm.updateBitmap(index, this.composite(frame.key).getContext('2d').getImageData(0, 0, W, H), CX, CY, 2);
 +                    desired.push(frame.source);
 +                } else {
 +                    const blob = await this.frameBlob(frame.key);
@@ -964,6 +1140,18 @@ index 0000000..bcaea94
 +            }
 +            vm.emitTargetsUpdate();
 +            vm.runtime.emitProjectChanged();
++            if (this.rigs.length) {
++                const snapshot = {
++                    rigs: this.rigs.map(r => ({...r})),
++                    frames: this.state.frames.map(f => ({canvas: this.canvases.get(f.key), poses: this.copyPoses(f.key) || new Map()}))
++                };
++                // updateBitmap finishes a moment later, so take the costume signature after it settles
++                setTimeout(() => {
++                    sessionCache.set(target.id, {...snapshot, signature: costumeSignature(target)});
++                }, 1500);
++            } else {
++                sessionCache.delete(target.id);
++            }
 +            this.props.onClose(true);
 +        } catch (e) {
 +            console.error(e); // eslint-disable-line no-console
@@ -1131,6 +1319,38 @@ index 0000000..bcaea94
 +                            {'Filled shapes'}
 +                        </label>
 +                        <div className={styles.propSep} />
++                        <div className={styles.propLabel}>{'Stickmen'}</div>
++                        <button
++                            className={classNames(styles.button, styles.stickAdd)}
++                            onClick={this.addStickman}
++                        >{'+ Add stickman'}</button>
++                        {this.selected() ? (
++                            <div className={styles.stickRow}>
++                                <button
++                                    className={styles.button}
++                                    title="Face the other way (this frame)"
++                                    onClick={this.flipStickman}
++                                >{'Flip'}</button>
++                                <button
++                                    className={styles.button}
++                                    title="Give the stickman a sword, or take it away"
++                                    onClick={this.toggleSword}
++                                >{this.selected().sword ? 'No sword' : 'Sword'}</button>
++                                <button
++                                    className={styles.button}
++                                    title="Paint the stickman with the colour above"
++                                    onClick={this.recolorStickman}
++                                >{'Colour'}</button>
++                                <button
++                                    className={styles.button}
++                                    title="Remove this stickman from every frame"
++                                    onClick={this.deleteStickman}
++                                >{'Delete'}</button>
++                            </div>
++                        ) : (this.rigs.length ? (
++                            <div className={styles.stickHint}>{'Pick the Pose tool (S) and click a stickman\'s orange dot to select it.'}</div>
++                        ) : null)}
++                        <div className={styles.propSep} />
 +                        <label className={styles.check}>
 +                            <input
 +                                checked={onion}
@@ -1270,10 +1490,10 @@ index 0000000..bcaea94
 +export default AnimateEditor;
 diff --git a/src/components/sl-animate/animate.css b/src/components/sl-animate/animate.css
 new file mode 100644
-index 0000000..4890fb7
+index 0000000..3332f3f
 --- /dev/null
 +++ b/src/components/sl-animate/animate.css
-@@ -0,0 +1,440 @@
+@@ -0,0 +1,459 @@
 +/* Stick Lab Animate (Aero style) */
 +
 +.animate-bar {
@@ -1713,6 +1933,25 @@ index 0000000..4890fb7
 +    flex-grow: 1;
 +    min-width: 0;
 +    min-height: 0;
++}
++
++.stick-add {
++    width: 100%;
++    color: #ffffff;
++    border-color: #1b4f8f;
++    background: linear-gradient(180deg, #9fd0f7 0%, #5ea6e8 45%, #2a6ab8 50%, #3a87d6 100%);
++    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
++}
++
++.stick-row {
++    display: grid;
++    grid-template-columns: 1fr 1fr;
++    gap: 3px;
++}
++
++.stick-hint {
++    font-size: 0.68rem;
++    color: #555;
 +}
 diff --git a/src/components/sl-duo/duo-panel.jsx b/src/components/sl-duo/duo-panel.jsx
 new file mode 100644
