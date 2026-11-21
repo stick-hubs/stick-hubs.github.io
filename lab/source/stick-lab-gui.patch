@@ -73,10 +73,10 @@ index ad44099..bda246b 100644
      border: 1px solid $looks-secondary;
      box-sizing: content-box; /* To match scratch-block vertical toolbox borders */
 diff --git a/src/components/gui/gui.jsx b/src/components/gui/gui.jsx
-index 30f8336..93b2048 100644
+index 30f8336..fe402d6 100644
 --- a/src/components/gui/gui.jsx
 +++ b/src/components/gui/gui.jsx
-@@ -44,6 +44,10 @@ import {Theme} from '../../lib/themes';
+@@ -44,6 +44,11 @@ import {Theme} from '../../lib/themes';
  
  import {isRendererSupported, isBrowserSupported} from '../../lib/tw-environment-support-prober';
  
@@ -84,10 +84,11 @@ index 30f8336..93b2048 100644
 +import CodeModeToggle from '../sl-text-code/code-mode-toggle.jsx';
 +import TextCodeEditor from '../sl-text-code/text-code-editor.jsx';
 +import DuoPanel from '../sl-duo/duo-panel.jsx';
++import PublishDialog from '../sl-publish/publish-dialog.jsx';
  import styles from './gui.css';
  import addExtensionIcon from './icon--extensions.svg';
  import codeIcon from '!../../lib/tw-recolor/build!./icon--code.svg';
-@@ -343,9 +347,9 @@ const GUIComponent = props => {
+@@ -343,9 +348,9 @@ const GUIComponent = props => {
                                              src={codeIcon()}
                                          />
                                          <FormattedMessage
@@ -100,7 +101,7 @@ index 30f8336..93b2048 100644
                                          />
                                      </Tab>
                                      <Tab
-@@ -400,19 +404,10 @@ const GUIComponent = props => {
+@@ -400,19 +405,10 @@ const GUIComponent = props => {
                                              theme={theme}
                                              vm={vm}
                                          />
@@ -122,19 +123,20 @@ index 30f8336..93b2048 100644
                                      </Box>
                                      <Box className={styles.watermark}>
                                          <Watermark />
-@@ -449,6 +444,7 @@ const GUIComponent = props => {
+@@ -449,6 +445,8 @@ const GUIComponent = props => {
                          </Box>
                      </Box>
                  </Box>
 +                <DuoPanel vm={vm} />
++                <PublishDialog vm={vm} />
                  <DragLayer />
              </Box>
          );
 diff --git a/src/components/menu-bar/menu-bar.css b/src/components/menu-bar/menu-bar.css
-index 444e77c..ccb2758 100644
+index 444e77c..854e772 100644
 --- a/src/components/menu-bar/menu-bar.css
 +++ b/src/components/menu-bar/menu-bar.css
-@@ -233,3 +233,52 @@
+@@ -233,3 +233,58 @@
      color: inherit;
      text-decoration: none;
  }
@@ -187,20 +189,27 @@ index 444e77c..ccb2758 100644
 +    color: #ffe27a;
 +    text-shadow: 0 0 4px rgba(255, 220, 90, 0.8);
 +}
++
++.publish-button {
++    background: linear-gradient(180deg, rgba(166, 230, 154, 0.95) 0%, rgba(92, 193, 79, 0.95) 45%, rgba(47, 154, 42, 0.95) 50%, rgba(70, 181, 61, 0.95) 100%);
++    border-color: rgba(255, 255, 255, 0.75);
++    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
++}
 diff --git a/src/components/menu-bar/menu-bar.jsx b/src/components/menu-bar/menu-bar.jsx
-index 6caddb5..9418d2a 100644
+index 6caddb5..0892b5a 100644
 --- a/src/components/menu-bar/menu-bar.jsx
 +++ b/src/components/menu-bar/menu-bar.jsx
-@@ -96,6 +96,8 @@ import editIcon from './icon--edit.svg';
+@@ -96,6 +96,9 @@ import editIcon from './icon--edit.svg';
  import addonsIcon from './addons.svg';
  import errorIcon from './tw-error.svg';
  import advancedIcon from './tw-advanced.svg';
 +import stickLabLogo from './sl-logo.svg';
 +import {toggleDuo} from '../sl-duo/duo-store';
++import {setPublishOpen} from '../sl-publish/publish-store';
  
  import ninetiesLogo from './nineties_logo.svg';
  import catLogo from './cat_logo.svg';
-@@ -492,6 +494,29 @@ class MenuBar extends React.Component {
+@@ -492,6 +495,49 @@ class MenuBar extends React.Component {
              >
                  <div className={styles.mainMenu}>
                      <div className={styles.fileGroup}>
@@ -217,7 +226,7 @@ index 6caddb5..9418d2a 100644
 +                                draggable={false}
 +                                src={stickLabLogo}
 +                            />
-+                            <span className={styles.stickLabName}>{'Stick Lab'}<span className={styles.stickLabVersion}>{' 1.2'}</span></span>
++                            <span className={styles.stickLabName}>{'Stick Lab'}<span className={styles.stickLabVersion}>{' 1.3'}</span></span>
 +                        </a>
 +                        <button
 +                            className={classNames(styles.menuBarItem, styles.hoverable, styles.duoButton)}
@@ -227,10 +236,30 @@ index 6caddb5..9418d2a 100644
 +                            <span className={styles.duoSpark}>{'\u2726'}</span>
 +                            <span>{'Duo'}</span>
 +                        </button>
++                        <button
++                            className={classNames(styles.menuBarItem, styles.hoverable, styles.duoButton, styles.publishButton)}
++                            title="Publish your project to the Stick Hubs Game Hub"
++                            onClick={() => setPublishOpen(true)} // eslint-disable-line react/jsx-no-bind
++                        >
++                            <svg
++                                aria-hidden="true"
++                                height="14"
++                                viewBox="0 0 24 24"
++                                width="14"
++                            ><path
++                                d="M12 3 L12 15 M6 9 L12 3 L18 9 M4 15 V20 H20 V15"
++                                fill="none"
++                                stroke="currentColor"
++                                strokeLinecap="round"
++                                strokeLinejoin="round"
++                                strokeWidth="2.6"
++                            /></svg>
++                            <span>{'Publish'}</span>
++                        </button>
                          {this.props.errors.length > 0 && <div>
                              <MenuLabel
                                  open={this.props.errorsMenuOpen}
-@@ -1015,7 +1040,7 @@ class MenuBar extends React.Component {
+@@ -1015,7 +1061,7 @@ class MenuBar extends React.Component {
                      <div className={styles.menuBarItem}>
                          <a
                              className={styles.feedbackLink}
@@ -1955,10 +1984,10 @@ index 0000000..3332f3f
 +}
 diff --git a/src/components/sl-duo/duo-panel.jsx b/src/components/sl-duo/duo-panel.jsx
 new file mode 100644
-index 0000000..4814f90
+index 0000000..5663b01
 --- /dev/null
 +++ b/src/components/sl-duo/duo-panel.jsx
-@@ -0,0 +1,462 @@
+@@ -0,0 +1,581 @@
 +import React from 'react';
 +import PropTypes from 'prop-types';
 +import {connect} from 'react-redux';
@@ -1968,14 +1997,45 @@ index 0000000..4814f90
 +import {getWorkspace} from '../../lib/sl-workspace-registry';
 +import {workspaceToText} from '../../lib/sl-text-code/printer';
 +import {applyText, commandList} from '../../lib/sl-text-code/apply';
++import {buildGame} from '../../lib/sl-duo/game-builder';
 +import styles from './duo.css';
 +
-+const WELCOME = 'Hi! I\'m **Stick Lab Duo**. I can explain blocks, find bugs, and write scripts for you. ' +
-+    'Try: "make my sprite jump when I press space" or "why doesn\'t my score go up?"';
++const WELCOME = 'Hi! I\'m **Stick Lab Duo**. I can explain your scripts, find and fix bugs, write scripts, ' +
++    'and even build a whole small game. Use the buttons below, or just ask!';
++
++const ACTIONS = [
++    {kind: 'explain', label: 'Explain', title: 'Explain what this sprite\'s scripts do',
++        prompt: 'Explain what the scripts of the sprite I\'m editing do, step by step, in simple words.'},
++    {kind: 'fix', label: 'Fix bugs', title: 'Find bugs in this sprite\'s scripts and fix them',
++        prompt: 'Find the bugs in the scripts of the sprite I\'m editing and fix them.'},
++    {kind: 'build', label: 'Build a game', title: 'Describe a game and Duo makes the sprites and scripts', prompt: null}
++];
++
++const BUILD_PREFIX = 'Build a game: ';
++
++const FIX_RULES = `The user pressed "Fix bugs". Reply with:
++1. A short list of the bugs you found and how you fixed them (or say the scripts look fine).
++2. The complete fixed scripts for this sprite in ONE \`\`\`stick code block. Include every script of the sprite,
++also the ones that were already fine, because the user can press "Replace my scripts" to swap all of them for your block.
++If there are no scripts or no bugs, don't write a code block.`;
++
++const BUILD_RULES = `The user pressed "Build a game". Make a small, fun, working game from their idea (2 to 5 sprites).
++First write 2 or 3 short sentences about the game and how to play it. Then write one \`\`\`stick code block per sprite.
++Put the sprite settings on the same line as the three backticks, like this:
++\`\`\`stick sprite="Player" look="stickman" color="#1e88e5" x="-180" y="-120" size="100"
++when_flag_clicked {
++    ...
++}
++\`\`\`
++looks for sprites: stickman, enemy, ball, box, coin, star, platform, flag. color is a hex colour.
++Use sprite="Stage" with look="day", "night", "grass" or "space" for the backdrop and for scripts like a timer.
++Variables ($name) and lists (@name) are shared by all sprites. Use broadcasts to talk between sprites.
++Every script must start with a "when" block. Use only commands from the list. Keep scripts short and simple.
++The user presses "Build this game" to make all the sprites and scripts.`;
 +
 +const SUGGESTIONS = [
 +    'Make my sprite jump when I press space',
-+    'Explain what my scripts do',
++    'Build a game: a stickman collects coins and dodges a red enemy',
 +    'Give me an idea for a game'
 +];
 +
@@ -2006,12 +2066,12 @@ index 0000000..4814f90
 +
 +const splitMessage = text => {
 +    const parts = [];
-+    const re = /```([a-zA-Z]*)\n?([\s\S]*?)(```|$)/g;
++    const re = /```([a-zA-Z]*)([^\n`]*)\n?([\s\S]*?)(```|$)/g;
 +    let last = 0;
 +    let m;
 +    while ((m = re.exec(text))) {
 +        if (m.index > last) parts.push({type: 'text', text: text.slice(last, m.index)});
-+        parts.push({type: 'code', lang: m[1], text: m[2].replace(/\n$/, ''), closed: m[3] === '```'});
++        parts.push({type: 'code', lang: m[1], info: m[2].trim(), text: m[3].replace(/\n$/, ''), closed: m[4] === '```'});
 +        last = re.lastIndex;
 +        if (m[0] === '') re.lastIndex++;
 +    }
@@ -2072,7 +2132,8 @@ index 0000000..4814f90
 +            showSettings: false,
 +            settings: loadSettings(),
 +            serverReady: null,
-+            applied: {}
++            applied: {},
++            building: false
 +        };
 +        this.listRef = React.createRef();
 +        this.inputRef = React.createRef();
@@ -2104,7 +2165,7 @@ index 0000000..4814f90
 +        saveSettings(settings);
 +        this.setState({settings});
 +    }
-+    buildSystem () {
++    buildSystem (kind) {
 +        const lines = [
 +            'You are Stick Lab Duo, the friendly coding helper inside Stick Lab, a block coding app by Stick Hubs ' +
 +            '(based on Scratch 3 and TurboWarp). Many users are kids and beginners: use simple words, be encouraging, ' +
@@ -2140,7 +2201,7 @@ index 0000000..4814f90
 +                target.isStage ? [] : Object.values(vm.runtime.getTargetForStage().variables)
 +            ).filter(v => v.type === '' || v.type === 'list').map(v => (v.type === 'list' ? `@${v.name}` : `$${v.name}`));
 +            if (vars.length) lines.push(`Variables and lists: ${vars.join(', ')}.`);
-+            if (this.state.settings.seeCode && ws) {
++            if ((this.state.settings.seeCode || kind === 'explain' || kind === 'fix') && ws && kind !== 'build') {
 +                try {
 +                    const code = workspaceToText(ws.workspace, ws.ScratchBlocks).text.trim();
 +                    lines.push('', code ? `The user's current scripts for this sprite:\n\`\`\`stick\n${code}\n\`\`\`` :
@@ -2150,25 +2211,29 @@ index 0000000..4814f90
 +                }
 +            }
 +        }
++        if (kind === 'fix') lines.push('', FIX_RULES);
++        if (kind === 'build') lines.push('', BUILD_RULES);
 +        return lines.join('\n');
 +    }
-+    async handleSend (textOverride) {
++    async handleSend (textOverride, kindOverride) {
 +        const text = (typeof textOverride === 'string' ? textOverride : this.state.input).trim();
 +        if (!text || this.state.busy) return;
-+        const history = this.state.messages.concat({role: 'user', content: text});
-+        this.setState({messages: history.concat({role: 'assistant', content: '', pending: true}), input: '',
++        const kind = typeof kindOverride === 'string' ? kindOverride :
++            (text.toLowerCase().startsWith(BUILD_PREFIX.toLowerCase()) ? 'build' : null);
++        const history = this.state.messages.concat({role: 'user', content: text, kind});
++        this.setState({messages: history.concat({role: 'assistant', content: '', pending: true, kind}), input: '',
 +            busy: true, error: null});
 +        this.abort = new AbortController();
 +        try {
 +            const result = await sendToDuo({
-+                system: this.buildSystem(),
-+                messages: history.map(m => ({role: m.role, content: m.content})).slice(-30),
++                system: this.buildSystem(kind),
++                messages: history.filter(m => !m.local).map(m => ({role: m.role, content: m.content})).slice(-30),
 +                settings: this.state.settings,
 +                signal: this.abort.signal,
-+                onText: partial => this.setState({messages: history.concat({role: 'assistant', content: partial, pending: true})})
++                onText: partial => this.setState({messages: history.concat({role: 'assistant', content: partial, pending: true, kind})})
 +            });
 +            this.setState({
-+                messages: history.concat({role: 'assistant', content: result.text || '(no answer)'}),
++                messages: history.concat({role: 'assistant', content: result.text || '(no answer)', kind}),
 +                busy: false,
 +                remaining: result.remaining
 +            });
@@ -2219,6 +2284,41 @@ index 0000000..4814f90
 +            this.setState({error: `That code didn't fit: ${e.message}. Ask Duo to fix it.`});
 +        }
 +    }
++    handleReplaceCode (code, id) {
++        const ws = getWorkspace();
++        if (!ws) {
++            this.setState({error: 'Open the Script tab first, then try again.'});
++            return;
++        }
++        // eslint-disable-next-line no-alert
++        if (!window.confirm('Replace all the scripts of this sprite with Duo\'s fixed scripts?')) return;
++        try {
++            applyText(`${code}\n`, {
++                ScratchBlocks: ws.ScratchBlocks,
++                workspace: ws.workspace,
++                vm: this.props.vm,
++                toolboxXML: this.props.toolboxXML
++            });
++            this.setState(s => ({applied: {...s.applied, [`${id}r`]: true}, error: null}));
++        } catch (e) {
++            this.setState({error: `That code didn't fit: ${e.message}. Ask Duo to fix it.`});
++        }
++    }
++    async handleBuild (parts, id) {
++        if (this.state.building) return;
++        this.setState({building: true, error: null});
++        try {
++            const made = await buildGame(parts, {vm: this.props.vm, getToolbox: () => this.props.toolboxXML});
++            this.setState(s => ({
++                applied: {...s.applied, [id]: true},
++                building: false,
++                messages: s.messages.concat({role: 'assistant', content: `Built ${made.join(', ')}. Press the green flag to play!`,
++                    local: true})
++            }));
++        } catch (e) {
++            this.setState({building: false, error: `Couldn't build the game: ${e.message}`});
++        }
++    }
 +    renderMessage (m, i) {
 +        if (m.role === 'user') {
 +            return (
@@ -2229,6 +2329,9 @@ index 0000000..4814f90
 +            );
 +        }
 +        const parts = splitMessage(m.content);
++        const spriteParts = m.kind === 'build' && !m.pending ?
++            parts.filter(p => p.type === 'code' && p.closed && /sprite\s*=/.test(p.info || '')) : [];
++        const buildId = `${i}-build`;
 +        return (
 +            <div
 +                key={i}
@@ -2242,23 +2345,44 @@ index 0000000..4814f90
 +                        />);
 +                    }
 +                    const id = `${i}-${j}`;
-+                    const canAdd = part.closed && !m.pending && (part.lang === 'stick' || part.lang === '');
++                    const canAdd = part.closed && !m.pending && (part.lang === 'stick' || part.lang === '') &&
++                        !(spriteParts.length && /sprite\s*=/.test(part.info || ''));
 +                    return (
 +                        <div
 +                            key={j}
 +                            className={styles.code}
 +                        >
 +                            <pre>{part.text}</pre>
++                            {part.info && /sprite\s*=/.test(part.info) ? (
++                                <div className={styles.codeLabel}>{part.info.replace(/"/g, '').replace(/\s+/g, ' · ')}</div>
++                            ) : null}
 +                            {canAdd ? (
-+                                <button
-+                                    className={styles.addButton}
-+                                    disabled={this.state.applied[id]}
-+                                    onClick={() => this.handleAddCode(part.text, id)} // eslint-disable-line react/jsx-no-bind
-+                                >{this.state.applied[id] ? '✓ Added to your scripts' : '+ Add to my scripts'}</button>
++                                <div className={styles.codeButtons}>
++                                    <button
++                                        className={styles.addButton}
++                                        disabled={this.state.applied[id]}
++                                        onClick={() => this.handleAddCode(part.text, id)} // eslint-disable-line react/jsx-no-bind
++                                    >{this.state.applied[id] ? '✓ Added to your scripts' : '+ Add to my scripts'}</button>
++                                    {m.kind === 'fix' ? (
++                                        <button
++                                            className={classNames(styles.addButton, styles.replaceButton)}
++                                            disabled={this.state.applied[`${id}r`]}
++                                            onClick={() => this.handleReplaceCode(part.text, id)} // eslint-disable-line react/jsx-no-bind
++                                        >{this.state.applied[`${id}r`] ? '✓ Replaced' : '⟳ Replace my scripts'}</button>
++                                    ) : null}
++                                </div>
 +                            ) : null}
 +                        </div>
 +                    );
 +                })}
++                {spriteParts.length ? (
++                    <button
++                        className={styles.buildButton}
++                        disabled={this.state.applied[buildId] || this.state.building}
++                        onClick={() => this.handleBuild(spriteParts, buildId)} // eslint-disable-line react/jsx-no-bind
++                    >{this.state.applied[buildId] ? '✓ Game built' : this.state.building ? 'Building...' :
++                            `▶ Build this game (${spriteParts.length} part${spriteParts.length === 1 ? '' : 's'})`}</button>
++                ) : null}
 +                {m.pending && !m.content ? <span className={styles.typing}><i /><i /><i /></span> : null}
 +            </div>
 +        );
@@ -2374,6 +2498,30 @@ index 0000000..4814f90
 +                    {messages.map((m, i) => this.renderMessage(m, i))}
 +                    {error ? <div className={styles.error}>{error}</div> : null}
 +                </div>
++                <div className={styles.actions}>
++                    {ACTIONS.map(a => (
++                        <button
++                            key={a.kind}
++                            className={styles.action}
++                            disabled={busy}
++                            title={a.title}
++                            onClick={() => { // eslint-disable-line react/jsx-no-bind
++                                if (a.prompt) {
++                                    this.handleSend(a.prompt, a.kind);
++                                } else {
++                                    this.setState({input: BUILD_PREFIX});
++                                    setTimeout(() => {
++                                        const el = this.inputRef.current;
++                                        if (el) {
++                                            el.focus();
++                                            el.setSelectionRange(el.value.length, el.value.length);
++                                        }
++                                    }, 0);
++                                }
++                            }}
++                        >{a.label}</button>
++                    ))}
++                </div>
 +                <div className={styles.composer}>
 +                    <textarea
 +                        className={styles.input}
@@ -2450,10 +2598,10 @@ index 0000000..65acb46
 +};
 diff --git a/src/components/sl-duo/duo.css b/src/components/sl-duo/duo.css
 new file mode 100644
-index 0000000..6b2a49c
+index 0000000..2e490f7
 --- /dev/null
 +++ b/src/components/sl-duo/duo.css
-@@ -0,0 +1,322 @@
+@@ -0,0 +1,391 @@
 +/* Stick Lab Duo chat panel (Aero style) */
 +
 +.panel {
@@ -2775,6 +2923,1639 @@ index 0000000..6b2a49c
 +    font-size: 0.65rem;
 +    color: #5a6b80;
 +    background: #e3edf9;
++}
++
++/* Stick Lab 1.3 */
++.actions {
++    display: flex;
++    gap: 0.35rem;
++    padding: 0.4rem 0.55rem 0;
++    border-top: 1px solid #c7d6e8;
++    background: #eef3fa;
++}
++
++.action {
++    flex: 1;
++    padding: 0.3rem 0.3rem;
++    border: 1px solid #9db4cf;
++    border-radius: 12px;
++    background: linear-gradient(180deg, #ffffff 0%, #edf3fa 49%, #dde8f5 50%, #e8f0f9 100%);
++    color: #1f3550;
++    font: bold 0.72rem "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
++    cursor: pointer;
++}
++
++.action:disabled {
++    opacity: 0.55;
++    cursor: default;
++}
++
++.code-buttons {
++    display: flex;
++    flex-wrap: wrap;
++    gap: 0.3rem;
++}
++
++.replace-button {
++    background: linear-gradient(180deg, #ffe4a8 0%, #f6b93b 45%, #d9891a 50%, #eda33a 100%);
++    border-color: #a8650f;
++}
++
++.code-label {
++    padding: 0.2rem 0.45rem;
++    background: #2a6ab8;
++    color: #ffffff;
++    font: bold 0.68rem Verdana, Tahoma, sans-serif;
++    border-radius: 3px 3px 0 0;
++}
++
++.build-button {
++    display: block;
++    width: 100%;
++    margin-top: 0.4rem;
++    padding: 0.45rem 0.6rem;
++    border: 1px solid #1b6a2a;
++    border-radius: 4px;
++    background: linear-gradient(180deg, #a6e69a 0%, #5cc14f 45%, #2f9a2a 50%, #46b53d 100%);
++    color: #ffffff;
++    font: bold 0.82rem "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
++    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
++    cursor: pointer;
++}
++
++.build-button:disabled {
++    filter: grayscale(0.4);
++    cursor: default;
++}
++
++.code-buttons .add-button {
++    width: auto;
++    flex: 1;
++    white-space: nowrap;
++}
+diff --git a/src/components/sl-level/level-editor.jsx b/src/components/sl-level/level-editor.jsx
+new file mode 100644
+index 0000000..258a67b
+--- /dev/null
++++ b/src/components/sl-level/level-editor.jsx
+@@ -0,0 +1,550 @@
++// Stick Lab 1.3: a tile level editor. Paint a level from tiles; it saves as a costume (or backdrop)
++// plus a list "<name> map" that scripts can read with the "tile at x y" block.
++import React from 'react';
++import PropTypes from 'prop-types';
++import classNames from 'classnames';
++import styles from './level.css';
++import {T, COLS, ROWS, SOLID, TILES, BACKGROUNDS, drawLevel, starterRows, emptyRows} from './tiles';
++
++const W = COLS * T;
++const H = ROWS * T;
++const MAX_UNDO = 40;
++const PROCCODE = 'tile at x %s y %s';
++
++const TOOLS = [
++    {id: 'paint', label: 'Paint', icon: 'M4 20 L7 19 L19 7 L17 5 L5 17 Z'},
++    {id: 'erase', label: 'Erase', icon: 'M8 20 H20 M4 16 L14 6 L19 11 L11 19 H8 Z'},
++    {id: 'rect', label: 'Box', icon: 'M4 6 H20 V18 H4 Z'},
++    {id: 'fill', label: 'Fill', icon: 'M5 12 L12 5 L19 12 L12 19 Z M19 14 C 21 17, 17 17, 19 14'}
++];
++
++const isLevelList = v => v.type === 'list' && / map$/.test(v.name) && Array.isArray(v.value) &&
++    v.value.length >= ROWS && v.value.slice(0, ROWS).every(r => typeof r === 'string' && r.length === COLS);
++
++const levelLists = vm => Object.values(vm.runtime.getTargetForStage().variables).filter(isLevelList);
++
++const uid = () => `sl${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
++
++class LevelEditor extends React.Component {
++    constructor (props) {
++        super(props);
++        const stage = props.vm.runtime.getTargetForStage();
++        const existing = levelLists(props.vm);
++        const sprites = props.vm.runtime.targets.filter(t => t.isOriginal && !t.isStage);
++        let name = 'level1';
++        let n = 1;
++        const taken = new Set(existing.map(v => v.name.replace(/ map$/, '')));
++        while (taken.has(name)) name = `level${++n}`;
++        this.state = {
++            name,
++            rows: starterRows(),
++            background: 'day',
++            tile: 'G',
++            tool: 'paint',
++            existing: existing.map(v => v.name.replace(/ map$/, '')),
++            helperFor: sprites.length ? sprites[0].id : '',
++            addHelper: sprites.length > 0,
++            sprites: sprites.map(t => ({id: t.id, name: t.getName()})),
++            onStage: props.vm.editingTarget === stage,
++            saving: false,
++            message: null,
++            hover: null,
++            dragRect: null
++        };
++        this.undo = [];
++        this.canvasRef = React.createRef();
++        this.painting = false;
++        this.handlePointerDown = this.handlePointerDown.bind(this);
++        this.handlePointerMove = this.handlePointerMove.bind(this);
++        this.handlePointerUp = this.handlePointerUp.bind(this);
++        this.handleSave = this.handleSave.bind(this);
++        this.handleClose = this.handleClose.bind(this);
++        this.handleUndo = this.handleUndo.bind(this);
++        this.handleKey = this.handleKey.bind(this);
++        this.dirty = false;
++    }
++    componentDidMount () {
++        this.redraw();
++        window.addEventListener('pointerup', this.handlePointerUp);
++        window.addEventListener('keydown', this.handleKey);
++    }
++    componentDidUpdate () {
++        this.redraw();
++    }
++    componentWillUnmount () {
++        window.removeEventListener('pointerup', this.handlePointerUp);
++        window.removeEventListener('keydown', this.handleKey);
++    }
++    handleKey (e) {
++        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
++            e.preventDefault();
++            this.handleUndo();
++        }
++    }
++    redraw () {
++        const canvas = this.canvasRef.current;
++        if (!canvas) return;
++        const ctx = canvas.getContext('2d');
++        let rows = this.state.rows;
++        const r = this.state.dragRect;
++        if (r) rows = this.applyRect(rows, r, this.state.tool === 'erase' ? '.' : this.state.tile);
++        drawLevel(ctx, rows, this.state.background, {grid: true});
++        const h = this.state.hover;
++        if (h && !r) {
++            ctx.strokeStyle = '#ffffff';
++            ctx.lineWidth = 3;
++            ctx.strokeRect(h.c * T + 1.5, h.r * T + 1.5, T - 3, T - 3);
++            ctx.strokeStyle = '#1b4f8f';
++            ctx.lineWidth = 1;
++            ctx.strokeRect(h.c * T + 0.5, h.r * T + 0.5, T - 1, T - 1);
++        }
++    }
++    cellAt (e) {
++        const box = this.canvasRef.current.getBoundingClientRect();
++        const c = Math.floor((e.clientX - box.left) / box.width * COLS);
++        const r = Math.floor((e.clientY - box.top) / box.height * ROWS);
++        if (c < 0 || r < 0 || c >= COLS || r >= ROWS) return null;
++        return {c, r};
++    }
++    pushUndo () {
++        this.undo.push(this.state.rows);
++        if (this.undo.length > MAX_UNDO) this.undo.shift();
++    }
++    setCell (rows, {c, r}, ch) {
++        if (rows[r][c] === ch) return rows;
++        const next = rows.slice();
++        next[r] = next[r].slice(0, c) + ch + next[r].slice(c + 1);
++        return next;
++    }
++    applyRect (rows, {a, b}, ch) {
++        let next = rows;
++        for (let r = Math.min(a.r, b.r); r <= Math.max(a.r, b.r); r++) {
++            for (let c = Math.min(a.c, b.c); c <= Math.max(a.c, b.c); c++) {
++                next = this.setCell(next, {c, r}, ch);
++            }
++        }
++        return next;
++    }
++    floodFill (rows, start, ch) {
++        const from = rows[start.r][start.c];
++        if (from === ch) return rows;
++        const grid = rows.map(r => r.split(''));
++        const stack = [start];
++        while (stack.length) {
++            const {c, r} = stack.pop();
++            if (c < 0 || r < 0 || c >= COLS || r >= ROWS || grid[r][c] !== from) continue;
++            grid[r][c] = ch;
++            stack.push({c: c + 1, r}, {c: c - 1, r}, {c, r: r + 1}, {c, r: r - 1});
++        }
++        return grid.map(r => r.join(''));
++    }
++    handlePointerDown (e) {
++        const cell = this.cellAt(e);
++        if (!cell) return;
++        e.preventDefault();
++        const {tool, tile} = this.state;
++        const ch = tool === 'erase' || e.button === 2 ? '.' : tile;
++        this.pushUndo();
++        this.dirty = true;
++        if (tool === 'fill') {
++            this.setState(s => ({rows: this.floodFill(s.rows, cell, ch)}));
++            return;
++        }
++        if (tool === 'rect') {
++            this.setState({dragRect: {a: cell, b: cell}});
++            return;
++        }
++        this.painting = ch;
++        this.setState(s => ({rows: this.setCell(s.rows, cell, ch)}));
++    }
++    handlePointerMove (e) {
++        const cell = this.cellAt(e);
++        if (this.state.dragRect && cell) {
++            this.setState(s => ({dragRect: {a: s.dragRect.a, b: cell}}));
++            return;
++        }
++        if (this.painting !== false && cell) {
++            const ch = this.painting;
++            this.setState(s => ({rows: this.setCell(s.rows, cell, ch), hover: cell}));
++            return;
++        }
++        const h = this.state.hover;
++        if (!cell && h) this.setState({hover: null});
++        else if (cell && (!h || h.c !== cell.c || h.r !== cell.r)) this.setState({hover: cell});
++    }
++    handlePointerUp () {
++        this.painting = false;
++        if (this.state.dragRect) {
++            const ch = this.state.tool === 'erase' ? '.' : this.state.tile;
++            this.setState(s => ({rows: this.applyRect(s.rows, s.dragRect, ch), dragRect: null}));
++        }
++    }
++    handleUndo () {
++        if (!this.undo.length) return;
++        this.setState({rows: this.undo.pop()});
++    }
++    handleClear () {
++        this.pushUndo();
++        this.dirty = true;
++        this.setState({rows: emptyRows()});
++    }
++    handleOpen (name) {
++        const list = levelLists(this.props.vm).find(v => v.name === `${name} map`);
++        if (!list) return;
++        const bgItem = list.value.find(v => typeof v === 'string' && v.startsWith('bg:'));
++        const bg = bgItem ? bgItem.slice(3) : 'day';
++        this.undo = [];
++        this.dirty = false;
++        this.setState({
++            name,
++            rows: list.value.slice(0, ROWS),
++            background: BACKGROUNDS.some(b => b.id === bg) ? bg : 'day',
++            message: `Opened ${name}.`
++        });
++    }
++    handleClose () {
++        // eslint-disable-next-line no-alert
++        if (this.dirty && !window.confirm('Close the level editor without saving?')) return;
++        this.props.onClose(false);
++    }
++
++    // ------------------------------------------------------------------ saving
++
++    async handleSave () {
++        const vm = this.props.vm;
++        const target = vm.editingTarget;
++        const name = this.state.name.trim().replace(/\s+/g, ' ').slice(0, 40);
++        if (!target || this.state.saving) return;
++        if (!name) {
++            this.setState({message: 'Give your level a name first.'});
++            return;
++        }
++        this.setState({saving: true, message: 'Saving your level...'});
++        try {
++            const canvas = document.createElement('canvas');
++            canvas.width = W;
++            canvas.height = H;
++            const ctx = canvas.getContext('2d');
++            drawLevel(ctx, this.state.rows, this.state.background);
++            const costumes = target.getCostumes();
++            let index = costumes.findIndex(c => c.name === name);
++            if (index !== -1 && costumes[index].dataFormat !== 'svg') {
++                vm.updateBitmap(index, ctx.getImageData(0, 0, W, H), W / 2, H / 2, 2);
++            } else {
++                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
++                const data = new Uint8Array(await blob.arrayBuffer());
++                const storage = vm.runtime.storage;
++                const asset = storage.createAsset(storage.AssetType.ImageBitmap, storage.DataFormat.PNG, data, null, true);
++                const finalName = index !== -1 ? `${name} level` : name;
++                await vm.addCostume(`${asset.assetId}.png`, {
++                    name: finalName,
++                    dataFormat: 'png',
++                    asset,
++                    assetId: asset.assetId,
++                    md5: `${asset.assetId}.png`,
++                    bitmapResolution: 2,
++                    rotationCenterX: W / 2,
++                    rotationCenterY: H / 2
++                }, target.id);
++                index = target.getCostumes().findIndex(c => c.name === finalName);
++            }
++            if (index !== -1) target.setCostume(index);
++
++            // the map list, on the Stage so every sprite can read it
++            const stage = vm.runtime.getTargetForStage();
++            const listName = `${name} map`;
++            let list = stage.lookupVariableByNameAndType(listName, 'list');
++            if (!list) {
++                stage.createVariable(uid(), listName, 'list');
++                list = stage.lookupVariableByNameAndType(listName, 'list');
++            }
++            list.value = this.state.rows.concat(`bg:${this.state.background}`);
++            list._monitorUpToDate = false;
++
++            let note = '';
++            if (this.state.addHelper && this.state.helperFor) {
++                note = await this.addHelper(this.state.helperFor, list);
++            }
++            vm.emitTargetsUpdate();
++            vm.emitWorkspaceUpdate();
++            vm.runtime.emitProjectChanged();
++            this.dirty = false;
++            this.props.onClose(true, `Saved "${name}" as a ${target.isStage ? 'backdrop' : 'costume'} and the list "${listName}".${note}`);
++        } catch (e) {
++            console.error(e); // eslint-disable-line no-console
++            this.setState({saving: false, message: `Couldn't save the level: ${e.message}`});
++        }
++    }
++
++    // Adds the "tile at x () y ()" custom block to a sprite. It sets the variables "tile" (the tile's letter or
++    // symbol) and "solid" (true for solid tiles) for the point (x, y) on the stage.
++    async addHelper (spriteId, list) {
++        const vm = this.props.vm;
++        const sprite = vm.runtime.getTargetById(spriteId);
++        const stage = vm.runtime.getTargetForStage();
++        if (!sprite) return '';
++        const already = Object.values(sprite.blocks._blocks).some(b => b.opcode === 'procedures_prototype' &&
++            b.mutation && b.mutation.proccode === PROCCODE);
++        if (already) return ` "${sprite.getName()}" already has the "tile at x y" block.`;
++        const variable = name => {
++            let v = stage.lookupVariableByNameAndType(name, '');
++            if (!v) {
++                stage.createVariable(uid(), name, '');
++                v = stage.lookupVariableByNameAndType(name, '');
++            }
++            return v;
++        };
++        const tileVar = variable('tile');
++        const solidVar = variable('solid');
++
++        const blocks = [];
++        const make = (opcode, parent, extra = {}) => {
++            const block = {id: uid(), opcode, inputs: {}, fields: {}, next: null, parent,
++                shadow: false, topLevel: false, ...extra};
++            blocks.push(block);
++            return block;
++        };
++        // put a value in an input: a number/text shadow, or a reporter block over a shadow
++        const input = (block, name, value, shadowOpcode, field) => {
++            const shadow = make(shadowOpcode, block.id, {shadow: true,
++                fields: {[field]: {name: field, value: typeof value === 'function' ? (shadowOpcode === 'text' ? '' : '0') : String(value)}}});
++            if (typeof value === 'function') {
++                const reporter = value(block.id);
++                block.inputs[name] = {name, block: reporter.id, shadow: shadow.id};
++            } else {
++                block.inputs[name] = {name, block: shadow.id, shadow: shadow.id};
++            }
++        };
++        const argIds = [uid(), uid()];
++        const arg = name => parent => make('argument_reporter_string_number', parent,
++            {fields: {VALUE: {name: 'VALUE', value: name}}});
++        const op = (opcode, a, b, names = ['NUM1', 'NUM2']) => parent => {
++            const block = make(opcode, parent);
++            input(block, names[0], a, 'math_number', 'NUM');
++            input(block, names[1], b, 'math_number', 'NUM');
++            return block;
++        };
++        const floor = value => parent => {
++            const block = make('operator_mathop', parent, {fields: {OPERATOR: {name: 'OPERATOR', value: 'floor'}}});
++            input(block, 'NUM', value, 'math_number', 'NUM');
++            return block;
++        };
++        // column = floor((x + 240) / 20) + 1, row = floor((180 - y) / 20) + 1
++        const column = op('operator_add', floor(op('operator_divide', op('operator_add', arg('x'), 240), 20)), 1);
++        const row = op('operator_add', floor(op('operator_divide', op('operator_subtract', 180, arg('y')), 20)), 1);
++        const itemOfList = parent => {
++            const block = make('data_itemoflist', parent, {fields: {LIST: {name: 'LIST', id: list.id, value: list.name}}});
++            input(block, 'INDEX', row, 'math_integer', 'NUM');
++            return block;
++        };
++        const letterOf = parent => {
++            const block = make('operator_letter_of', parent);
++            input(block, 'LETTER', column, 'math_whole_number', 'NUM');
++            input(block, 'STRING', itemOfList, 'text', 'TEXT');
++            return block;
++        };
++        const tileReporter = parent => make('data_variable', parent,
++            {fields: {VARIABLE: {name: 'VARIABLE', id: tileVar.id, value: tileVar.name}}});
++        const contains = parent => {
++            const block = make('operator_contains', parent);
++            input(block, 'STRING1', SOLID, 'text', 'TEXT');
++            input(block, 'STRING2', tileReporter, 'text', 'TEXT');
++            return block;
++        };
++
++        const definition = make('procedures_definition', null, {topLevel: true, x: 520, y: 40});
++        const prototype = make('procedures_prototype', definition.id, {
++            shadow: true,
++            mutation: {
++                tagName: 'mutation', children: [], proccode: PROCCODE,
++                argumentids: JSON.stringify(argIds), argumentnames: JSON.stringify(['x', 'y']),
++                argumentdefaults: JSON.stringify(['', '']), warp: 'true'
++            }
++        });
++        definition.inputs.custom_block = {name: 'custom_block', block: prototype.id, shadow: prototype.id};
++        ['x', 'y'].forEach((name, i) => {
++            const reporter = make('argument_reporter_string_number', prototype.id,
++                {shadow: true, fields: {VALUE: {name: 'VALUE', value: name}}});
++            prototype.inputs[argIds[i]] = {name: argIds[i], block: reporter.id, shadow: reporter.id};
++        });
++        const setTile = make('data_setvariableto', definition.id,
++            {fields: {VARIABLE: {name: 'VARIABLE', id: tileVar.id, value: tileVar.name}}});
++        input(setTile, 'VALUE', letterOf, 'text', 'TEXT');
++        definition.next = setTile.id;
++        const setSolid = make('data_setvariableto', setTile.id,
++            {fields: {VARIABLE: {name: 'VARIABLE', id: solidVar.id, value: solidVar.name}}});
++        input(setSolid, 'VALUE', contains, 'text', 'TEXT');
++        setTile.next = setSolid.id;
++
++        await vm.shareBlocksToTarget(blocks, sprite.id);
++        return ` Added the "tile at x y" block to "${sprite.getName()}".`;
++    }
++
++    // ------------------------------------------------------------------ UI
++
++    renderTileButton (tile) {
++        return (
++            <button
++                key={tile.ch}
++                className={classNames(styles.tile, {[styles.tileActive]: this.state.tile === tile.ch && this.state.tool !== 'erase'})}
++                title={`${tile.name} (${tile.ch})${SOLID.includes(tile.ch) ? ' · solid' : ''}`}
++                onClick={() => this.setState(s => ({tile: tile.ch, tool: s.tool === 'erase' ? 'paint' : s.tool}))} // eslint-disable-line react/jsx-no-bind
++            >
++                <canvas
++                    height={T}
++                    ref={el => { // eslint-disable-line react/jsx-no-bind
++                        if (el) {
++                            const ctx = el.getContext('2d');
++                            ctx.clearRect(0, 0, T, T);
++                            tile.draw(ctx, 0, 0);
++                        }
++                    }}
++                    width={T}
++                />
++                <span>{tile.name}</span>
++            </button>
++        );
++    }
++    render () {
++        const {name, background, tool, existing, sprites, addHelper, helperFor, saving, message, onStage} = this.state;
++        return (
++            <div className={styles.level}>
++                <div className={styles.topBar}>
++                    <span className={styles.title}>{'Level editor'}</span>
++                    <label className={styles.topField}>
++                        {'Name'}
++                        <input
++                            className={styles.nameInput}
++                            maxLength={40}
++                            value={name}
++                            onChange={e => this.setState({name: e.target.value})} // eslint-disable-line react/jsx-no-bind
++                        />
++                    </label>
++                    <label className={styles.topField}>
++                        {'Background'}
++                        <select
++                            value={background}
++                            onChange={e => { // eslint-disable-line react/jsx-no-bind
++                                this.dirty = true;
++                                this.setState({background: e.target.value});
++                            }}
++                        >
++                            {BACKGROUNDS.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
++                        </select>
++                    </label>
++                    {existing.length ? (
++                        <label className={styles.topField}>
++                            {'Open'}
++                            <select
++                                value=""
++                                onChange={e => this.handleOpen(e.target.value)} // eslint-disable-line react/jsx-no-bind
++                            >
++                                <option value="">{'a saved level...'}</option>
++                                {existing.map(n => <option key={n} value={n}>{n}</option>)}
++                            </select>
++                        </label>
++                    ) : null}
++                    <span className={styles.spacer} />
++                    <button
++                        className={styles.saveButton}
++                        disabled={saving}
++                        onClick={this.handleSave}
++                    >{saving ? 'Saving...' : 'Save level'}</button>
++                    <button
++                        className={styles.closeButton}
++                        disabled={saving}
++                        onClick={this.handleClose}
++                    >{'Close'}</button>
++                </div>
++                <div className={styles.main}>
++                    <div className={styles.side}>
++                        <div className={styles.sideTitle}>{'Tools'}</div>
++                        <div className={styles.tools}>
++                            {TOOLS.map(t => (
++                                <button
++                                    key={t.id}
++                                    className={classNames(styles.tool, {[styles.toolActive]: tool === t.id})}
++                                    onClick={() => this.setState({tool: t.id})} // eslint-disable-line react/jsx-no-bind
++                                >
++                                    <svg
++                                        aria-hidden="true"
++                                        height="16"
++                                        viewBox="0 0 24 24"
++                                        width="16"
++                                    ><path
++                                        d={t.icon}
++                                        fill="none"
++                                        stroke="currentColor"
++                                        strokeLinejoin="round"
++                                        strokeWidth="2"
++                                    /></svg>
++                                    {t.label}
++                                </button>
++                            ))}
++                            <button
++                                className={styles.tool}
++                                onClick={this.handleUndo}
++                            >{'↶ Undo'}</button>
++                            <button
++                                className={styles.tool}
++                                onClick={() => this.handleClear()} // eslint-disable-line react/jsx-no-bind
++                            >{'Clear'}</button>
++                        </div>
++                        <div className={styles.sideTitle}>{'Tiles'}</div>
++                        <div className={styles.tiles}>{TILES.map(t => this.renderTileButton(t))}</div>
++                    </div>
++                    <div className={styles.center}>
++                        <div className={styles.canvasWrap}>
++                            <canvas
++                                className={styles.canvas}
++                                height={H}
++                                ref={this.canvasRef}
++                                width={W}
++                                onContextMenu={e => e.preventDefault()} // eslint-disable-line react/jsx-no-bind
++                                onPointerDown={this.handlePointerDown}
++                                onPointerLeave={() => this.setState({hover: null})} // eslint-disable-line react/jsx-no-bind
++                                onPointerMove={this.handlePointerMove}
++                            />
++                        </div>
++                        <div className={styles.bottom}>
++                            {sprites.length ? (
++                                <label className={styles.helper}>
++                                    <input
++                                        checked={addHelper}
++                                        type="checkbox"
++                                        onChange={e => this.setState({addHelper: e.target.checked})} // eslint-disable-line react/jsx-no-bind
++                                    />
++                                    {'Add the "tile at x () y ()" block to'}
++                                    <select
++                                        value={helperFor}
++                                        onChange={e => this.setState({helperFor: e.target.value})} // eslint-disable-line react/jsx-no-bind
++                                    >
++                                        {sprites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
++                                    </select>
++                                </label>
++                            ) : null}
++                            <div className={styles.note}>
++                                {message || (onStage ?
++                                    'Click or drag to paint. Right-click erases. The level is saved as a backdrop.' :
++                                    'Tip: levels work best as Stage backdrops. Select the Stage, then open the level editor there.')}
++                            </div>
++                            <div className={styles.note}>
++                                {'In scripts: "tile at x y" sets "tile" to the tile\'s letter and "solid" to true for ground, brick, stone, wood, ice and bonus blocks.'}
++                            </div>
++                        </div>
++                    </div>
++                </div>
++            </div>
++        );
++    }
++}
++
++LevelEditor.propTypes = {
++    onClose: PropTypes.func.isRequired,
++    vm: PropTypes.shape({
++        editingTarget: PropTypes.object,
++        runtime: PropTypes.object
++    }).isRequired
++};
++
++export default LevelEditor;
+diff --git a/src/components/sl-level/level.css b/src/components/sl-level/level.css
+new file mode 100644
+index 0000000..fc324d0
+--- /dev/null
++++ b/src/components/sl-level/level.css
+@@ -0,0 +1,203 @@
++/* Stick Lab 1.3 level editor (Aero style) */
++
++.level {
++    position: absolute;
++    inset: 0;
++    z-index: 60;
++    display: flex;
++    flex-direction: column;
++    background: #dfe8f3;
++    font-family: Verdana, Tahoma, "Segoe UI", sans-serif;
++    font-size: 0.75rem;
++    color: #1f3550;
++    border: 1px solid #9db4cf;
++    border-radius: 3px;
++}
++
++.top-bar {
++    display: flex;
++    align-items: center;
++    flex-wrap: wrap;
++    gap: 0.75rem;
++    padding: 0.4rem 0.6rem;
++    background: linear-gradient(180deg, #a3d2f7 0%, #62a7e8 46%, #2a6ab8 50%, #3283d6 100%);
++    color: #ffffff;
++    border-bottom: 1px solid #1b4f8f;
++}
++
++.title {
++    font: bold 1rem "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
++    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
++}
++
++.top-field {
++    display: inline-flex;
++    align-items: center;
++    gap: 0.35rem;
++    font-weight: bold;
++    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
++}
++
++.top-field select,
++.name-input,
++.helper select {
++    border: 1px solid #1b4f8f;
++    border-radius: 3px;
++    padding: 0.15rem 0.3rem;
++    font: 0.75rem Verdana, Tahoma, sans-serif;
++    color: #1f3550;
++    background: #ffffff;
++}
++
++.name-input {
++    width: 7.5rem;
++}
++
++.spacer {
++    flex: 1;
++}
++
++.save-button,
++.close-button {
++    padding: 0.3rem 0.9rem;
++    border-radius: 4px;
++    font: bold 0.8rem "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
++    cursor: pointer;
++}
++
++.save-button {
++    border: 1px solid #1b6a2a;
++    background: linear-gradient(180deg, #a6e69a 0%, #5cc14f 45%, #2f9a2a 50%, #46b53d 100%);
++    color: #ffffff;
++    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
++    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
++}
++
++.close-button {
++    border: 1px solid rgba(255, 255, 255, 0.7);
++    background: rgba(255, 255, 255, 0.18);
++    color: #ffffff;
++}
++
++.main {
++    flex: 1;
++    min-height: 0;
++    display: flex;
++}
++
++.side {
++    width: 11.5rem;
++    padding: 0.5rem;
++    overflow-y: auto;
++    background: linear-gradient(180deg, #f7fafd 0%, #e6eef8 100%);
++    border-right: 1px solid #b6c8de;
++}
++
++.side-title {
++    margin: 0.3rem 0 0.35rem;
++    font-weight: bold;
++    color: #2a5a94;
++}
++
++.tools {
++    display: grid;
++    grid-template-columns: 1fr 1fr;
++    gap: 0.3rem;
++}
++
++.tool {
++    display: inline-flex;
++    align-items: center;
++    gap: 0.3rem;
++    padding: 0.28rem 0.35rem;
++    border: 1px solid #9db4cf;
++    border-radius: 3px;
++    background: linear-gradient(180deg, #ffffff 0%, #edf3fa 49%, #dde8f5 50%, #e8f0f9 100%);
++    color: #1f3550;
++    font: 0.72rem Verdana, Tahoma, sans-serif;
++    cursor: pointer;
++}
++
++.tool-active {
++    border-color: #1b4f8f;
++    background: linear-gradient(180deg, #d6ecff 0%, #a9d3f7 49%, #7fbcef 50%, #a6d2f6 100%);
++    font-weight: bold;
++}
++
++.tiles {
++    display: grid;
++    grid-template-columns: 1fr 1fr;
++    gap: 0.3rem;
++}
++
++.tile {
++    display: flex;
++    flex-direction: column;
++    align-items: center;
++    gap: 0.15rem;
++    padding: 0.3rem 0.2rem;
++    border: 1px solid #c3d3e6;
++    border-radius: 4px;
++    background: #ffffff;
++    color: #1f3550;
++    font: 0.66rem Verdana, Tahoma, sans-serif;
++    cursor: pointer;
++}
++
++.tile canvas {
++    width: 30px;
++    height: 30px;
++    background: repeating-conic-gradient(#eef2f6 0% 25%, #ffffff 0% 50%) 50% / 10px 10px;
++}
++
++.tile-active {
++    border: 2px solid #2a6ab8;
++    padding: calc(0.3rem - 1px) calc(0.2rem - 1px);
++    background: #e3f1ff;
++}
++
++.center {
++    flex: 1;
++    min-width: 0;
++    display: flex;
++    flex-direction: column;
++    padding: 0.5rem;
++    gap: 0.4rem;
++}
++
++.canvas-wrap {
++    flex: 1;
++    min-height: 0;
++    display: flex;
++    align-items: center;
++    justify-content: center;
++}
++
++.canvas {
++    max-width: 100%;
++    max-height: 100%;
++    aspect-ratio: 4 / 3;
++    border: 1px solid #5f7fa6;
++    box-shadow: 0 2px 8px rgba(20, 50, 90, 0.25);
++    background: repeating-conic-gradient(#eef2f6 0% 25%, #ffffff 0% 50%) 50% / 20px 20px;
++    cursor: crosshair;
++    touch-action: none;
++}
++
++.bottom {
++    display: flex;
++    flex-direction: column;
++    gap: 0.25rem;
++}
++
++.helper {
++    display: flex;
++    align-items: center;
++    gap: 0.35rem;
++    font-weight: bold;
++}
++
++.note {
++    color: #4a6280;
++    font-size: 0.7rem;
++}
+diff --git a/src/components/sl-level/tiles.js b/src/components/sl-level/tiles.js
+new file mode 100644
+index 0000000..e1cf04e
+--- /dev/null
++++ b/src/components/sl-level/tiles.js
+@@ -0,0 +1,255 @@
++// Stick Lab 1.3 level editor: tiles and backgrounds, drawn at 2x (a tile is 40x40 px, 20x20 on the stage).
++
++const T = 40;
++const COLS = 24;
++const ROWS = 18;
++
++// Letters are solid tiles; symbols are not. The "tile at x y" block sets "solid" from this.
++const SOLID = 'GDBSWIQ';
++
++const rect = (ctx, x, y, w, h, c) => {
++    ctx.fillStyle = c;
++    ctx.fillRect(x, y, w, h);
++};
++
++const TILES = [
++    {ch: 'G', name: 'Grass', draw (ctx, x, y) {
++        rect(ctx, x, y, T, T, '#8a5a32');
++        rect(ctx, x, y + 26, T, 14, '#76492a');
++        rect(ctx, x, y, T, 11, '#4caf50');
++        rect(ctx, x, y + 11, T, 3, '#388e3c');
++        ctx.fillStyle = '#6fd36f';
++        for (let i = 0; i < 5; i++) ctx.fillRect(x + 3 + i * 8, y + 2, 3, 4);
++        ctx.fillStyle = '#a0703f';
++        ctx.fillRect(x + 8, y + 20, 5, 4);
++        ctx.fillRect(x + 26, y + 30, 6, 4);
++    }},
++    {ch: 'D', name: 'Dirt', draw (ctx, x, y) {
++        rect(ctx, x, y, T, T, '#8a5a32');
++        ctx.fillStyle = '#a0703f';
++        ctx.fillRect(x + 6, y + 8, 6, 5);
++        ctx.fillRect(x + 24, y + 18, 7, 5);
++        ctx.fillRect(x + 12, y + 29, 6, 4);
++        ctx.fillStyle = '#6e4526';
++        ctx.fillRect(x + 28, y + 5, 5, 4);
++        ctx.fillRect(x + 4, y + 22, 5, 4);
++    }},
++    {ch: 'B', name: 'Brick', draw (ctx, x, y) {
++        rect(ctx, x, y, T, T, '#e0d2c0');
++        ctx.fillStyle = '#c0533a';
++        for (let r = 0; r < 4; r++) {
++            const off = r % 2 ? -10 : 0;
++            for (let c = 0; c < 3; c++) {
++                const bx = x + off + c * 20 + 1;
++                const x0 = Math.max(bx, x);
++                const x1 = Math.min(bx + 18, x + T);
++                if (x1 > x0) ctx.fillRect(x0, y + r * 10 + 1, x1 - x0, 8);
++            }
++        }
++        ctx.fillStyle = 'rgba(255,255,255,0.18)';
++        ctx.fillRect(x, y + 1, T, 2);
++    }},
++    {ch: 'S', name: 'Stone', draw (ctx, x, y) {
++        rect(ctx, x, y, T, T, '#8d939a');
++        rect(ctx, x, y, T, 3, '#b3b9bf');
++        rect(ctx, x, y + 37, T, 3, '#6b7177');
++        ctx.strokeStyle = '#5f656b';
++        ctx.lineWidth = 2;
++        ctx.beginPath();
++        ctx.moveTo(x + 8, y + 10); ctx.lineTo(x + 16, y + 18); ctx.lineTo(x + 14, y + 27);
++        ctx.moveTo(x + 28, y + 6); ctx.lineTo(x + 25, y + 15);
++        ctx.stroke();
++    }},
++    {ch: 'W', name: 'Wood', draw (ctx, x, y) {
++        rect(ctx, x, y, T, T, '#b9803f');
++        ctx.fillStyle = '#93602c';
++        ctx.fillRect(x, y + 12, T, 2);
++        ctx.fillRect(x, y + 26, T, 2);
++        ctx.fillRect(x + 18, y, 2, 12);
++        ctx.fillRect(x + 8, y + 14, 2, 12);
++        ctx.fillRect(x + 30, y + 28, 2, 12);
++        ctx.fillStyle = '#d39a55';
++        ctx.fillRect(x, y, T, 2);
++    }},
++    {ch: 'I', name: 'Ice', draw (ctx, x, y) {
++        rect(ctx, x, y, T, T, '#bfe9fb');
++        rect(ctx, x, y + 30, T, 10, '#94d3f0');
++        ctx.fillStyle = 'rgba(255,255,255,0.85)';
++        ctx.beginPath();
++        ctx.moveTo(x + 6, y + 6); ctx.lineTo(x + 16, y + 6); ctx.lineTo(x + 6, y + 18);
++        ctx.fill();
++        ctx.strokeStyle = '#7cc3e6';
++        ctx.lineWidth = 2;
++        ctx.strokeRect(x + 1, y + 1, T - 2, T - 2);
++    }},
++    {ch: 'Q', name: 'Bonus block', draw (ctx, x, y) {
++        rect(ctx, x, y, T, T, '#b8860b');
++        rect(ctx, x + 2, y + 2, T - 4, T - 4, '#f6c22b');
++        ctx.fillStyle = '#b8860b';
++        [[4, 4], [32, 4], [4, 32], [32, 32]].forEach(([a, b]) => ctx.fillRect(x + a, y + b, 4, 4));
++        ctx.fillStyle = '#ffffff';
++        ctx.font = 'bold 26px Arial, sans-serif';
++        ctx.textAlign = 'center';
++        ctx.textBaseline = 'middle';
++        ctx.fillText('?', x + 20, y + 21);
++    }},
++    {ch: '~', name: 'Water', draw (ctx, x, y) {
++        rect(ctx, x, y + 6, T, T - 6, 'rgba(33, 133, 230, 0.75)');
++        ctx.strokeStyle = '#9fd5ff';
++        ctx.lineWidth = 3;
++        ctx.beginPath();
++        ctx.moveTo(x, y + 8);
++        ctx.quadraticCurveTo(x + 10, y + 2, x + 20, y + 8);
++        ctx.quadraticCurveTo(x + 30, y + 14, x + 40, y + 8);
++        ctx.stroke();
++    }},
++    {ch: '!', name: 'Lava', draw (ctx, x, y) {
++        rect(ctx, x, y + 6, T, T - 6, '#e2461f');
++        rect(ctx, x, y + 22, T, 18, '#b8320f');
++        ctx.fillStyle = '#ffb02e';
++        ctx.beginPath();
++        ctx.moveTo(x, y + 8);
++        ctx.quadraticCurveTo(x + 10, y, x + 20, y + 8);
++        ctx.quadraticCurveTo(x + 30, y + 16, x + 40, y + 8);
++        ctx.lineTo(x + 40, y + 12); ctx.lineTo(x, y + 12);
++        ctx.fill();
++        ctx.fillStyle = '#ffd36b';
++        ctx.fillRect(x + 10, y + 26, 4, 4);
++        ctx.fillRect(x + 28, y + 32, 4, 4);
++    }},
++    {ch: '^', name: 'Spikes', draw (ctx, x, y) {
++        ctx.fillStyle = '#c9ced3';
++        ctx.strokeStyle = '#5f656b';
++        ctx.lineWidth = 1.5;
++        for (let i = 0; i < 4; i++) {
++            ctx.beginPath();
++            ctx.moveTo(x + i * 10, y + T);
++            ctx.lineTo(x + i * 10 + 5, y + 16);
++            ctx.lineTo(x + i * 10 + 10, y + T);
++            ctx.closePath();
++            ctx.fill();
++            ctx.stroke();
++        }
++    }},
++    {ch: '*', name: 'Coin', draw (ctx, x, y) {
++        ctx.fillStyle = '#e0a800';
++        ctx.beginPath(); ctx.ellipse(x + 20, y + 20, 12, 14, 0, 0, Math.PI * 2); ctx.fill();
++        ctx.fillStyle = '#ffd54a';
++        ctx.beginPath(); ctx.ellipse(x + 20, y + 20, 9, 11, 0, 0, Math.PI * 2); ctx.fill();
++        ctx.fillStyle = '#fff3b0';
++        ctx.fillRect(x + 17, y + 12, 3, 16);
++    }},
++    {ch: '>', name: 'Goal flag', draw (ctx, x, y) {
++        rect(ctx, x + 8, y + 2, 4, T - 2, '#6b4a2b');
++        ctx.fillStyle = '#e53935';
++        ctx.beginPath();
++        ctx.moveTo(x + 12, y + 4); ctx.lineTo(x + 36, y + 11); ctx.lineTo(x + 12, y + 18);
++        ctx.fill();
++        rect(ctx, x + 4, y + 36, 12, 4, '#4a3020');
++    }}
++];
++
++const TILE_BY_CHAR = {};
++TILES.forEach(t => {
++    TILE_BY_CHAR[t.ch] = t;
++});
++
++const BACKGROUNDS = [
++    {id: 'day', name: 'Day sky', draw (ctx, w, h) {
++        const g = ctx.createLinearGradient(0, 0, 0, h);
++        g.addColorStop(0, '#5fb4f0'); g.addColorStop(1, '#d8f0ff');
++        ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
++        ctx.fillStyle = 'rgba(255,255,255,0.9)';
++        [[140, 110, 1], [520, 70, 1.3], [800, 150, 0.9]].forEach(([cx, cy, s]) => {
++            ctx.beginPath();
++            ctx.arc(cx, cy, 26 * s, 0, Math.PI * 2);
++            ctx.arc(cx + 30 * s, cy - 12 * s, 32 * s, 0, Math.PI * 2);
++            ctx.arc(cx + 62 * s, cy, 26 * s, 0, Math.PI * 2);
++            ctx.fill();
++        });
++    }},
++    {id: 'sunset', name: 'Sunset', draw (ctx, w, h) {
++        const g = ctx.createLinearGradient(0, 0, 0, h);
++        g.addColorStop(0, '#3a2a6b'); g.addColorStop(0.55, '#e0706b'); g.addColorStop(1, '#ffd08a');
++        ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
++        ctx.fillStyle = 'rgba(255, 220, 120, 0.9)';
++        ctx.beginPath(); ctx.arc(w * 0.72, h * 0.6, 60, 0, Math.PI * 2); ctx.fill();
++    }},
++    {id: 'night', name: 'Night', draw (ctx, w, h) {
++        const g = ctx.createLinearGradient(0, 0, 0, h);
++        g.addColorStop(0, '#0b1030'); g.addColorStop(1, '#27346b');
++        ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
++        ctx.fillStyle = '#ffffff';
++        for (let i = 0; i < 70; i++) {
++            const sx = (i * 137.5) % w;
++            const sy = ((i * 89.3) % (h * 0.7));
++            ctx.fillRect(sx, sy, i % 5 ? 2 : 3, i % 5 ? 2 : 3);
++        }
++        ctx.fillStyle = '#f4f1d0';
++        ctx.beginPath(); ctx.arc(w * 0.82, h * 0.16, 34, 0, Math.PI * 2); ctx.fill();
++    }},
++    {id: 'cave', name: 'Cave', draw (ctx, w, h) {
++        ctx.fillStyle = '#2a2420'; ctx.fillRect(0, 0, w, h);
++        ctx.fillStyle = '#352d27';
++        for (let i = 0; i < 40; i++) ctx.fillRect((i * 211) % w, (i * 97) % h, 30, 18);
++    }},
++    {id: 'none', name: 'See-through', draw () {}}
++];
++
++/** Draw a whole level (rows of characters) onto a 960x720 canvas. */
++const drawLevel = (ctx, rows, background, {grid = false} = {}) => {
++    const w = COLS * T;
++    const h = ROWS * T;
++    ctx.clearRect(0, 0, w, h);
++    const bg = BACKGROUNDS.find(b => b.id === background) || BACKGROUNDS[0];
++    ctx.save();
++    bg.draw(ctx, w, h);
++    ctx.restore();
++    for (let r = 0; r < ROWS; r++) {
++        for (let c = 0; c < COLS; c++) {
++            const tile = TILE_BY_CHAR[(rows[r] || '')[c]];
++            if (tile) {
++                ctx.save();
++                tile.draw(ctx, c * T, r * T);
++                ctx.restore();
++            }
++        }
++    }
++    if (grid) {
++        ctx.strokeStyle = 'rgba(0, 0, 0, 0.12)';
++        ctx.lineWidth = 1;
++        ctx.beginPath();
++        for (let c = 1; c < COLS; c++) {
++            ctx.moveTo(c * T + 0.5, 0); ctx.lineTo(c * T + 0.5, h);
++        }
++        for (let r = 1; r < ROWS; r++) {
++            ctx.moveTo(0, r * T + 0.5); ctx.lineTo(w, r * T + 0.5);
++        }
++        ctx.stroke();
++    }
++};
++
++const emptyRows = () => Array.from({length: ROWS}, () => '.'.repeat(COLS));
++
++const starterRows = () => {
++    const rows = emptyRows().map(r => r.split(''));
++    for (let c = 0; c < COLS; c++) {
++        rows[15][c] = 'G';
++        rows[16][c] = 'D';
++        rows[17][c] = 'D';
++    }
++    return rows.map(r => r.join(''));
++};
++
++export {
++    T,
++    COLS,
++    ROWS,
++    SOLID,
++    TILES,
++    TILE_BY_CHAR,
++    BACKGROUNDS,
++    drawLevel,
++    emptyRows,
++    starterRows
++};
+diff --git a/src/components/sl-publish/publish-dialog.jsx b/src/components/sl-publish/publish-dialog.jsx
+new file mode 100644
+index 0000000..4c355da
+--- /dev/null
++++ b/src/components/sl-publish/publish-dialog.jsx
+@@ -0,0 +1,297 @@
++// Stick Lab 1.3: publish the project to the Stick Hubs Game Hub.
++import React from 'react';
++import PropTypes from 'prop-types';
++import {connect} from 'react-redux';
++import {isPublishOpen, setPublishOpen, onPublishChange} from './publish-store';
++import {serverUrl, findMine, loadNickname, saveNickname, publishProject, siteUrl} from '../../lib/sl-hub/hub-client';
++import {sb3BlobToStickLabBlob} from '../../lib/sl-format';
++import styles from './publish.css';
++
++const THUMB_W = 480;
++const THUMB_H = 360;
++
++const snapshot = vm => new Promise(resolve => {
++    const renderer = vm.runtime.renderer;
++    if (!renderer || typeof renderer.requestSnapshot !== 'function') {
++        resolve(null);
++        return;
++    }
++    renderer.requestSnapshot(dataUrl => {
++        const img = new Image();
++        img.onload = () => {
++            const canvas = document.createElement('canvas');
++            canvas.width = THUMB_W;
++            canvas.height = THUMB_H;
++            const ctx = canvas.getContext('2d');
++            ctx.fillStyle = '#ffffff';
++            ctx.fillRect(0, 0, THUMB_W, THUMB_H);
++            ctx.drawImage(img, 0, 0, THUMB_W, THUMB_H);
++            canvas.toBlob(blob => resolve({blob, url: canvas.toDataURL('image/jpeg', 0.85)}), 'image/jpeg', 0.85);
++        };
++        img.onerror = () => resolve(null);
++        img.src = dataUrl;
++    });
++});
++
++class PublishDialog extends React.Component {
++    constructor (props) {
++        super(props);
++        this.state = this.freshState(isPublishOpen());
++        this.handleClose = () => {
++            if (!this.state.busy) setPublishOpen(false);
++        };
++        this.handlePublish = this.handlePublish.bind(this);
++        this.handleRetake = this.handleRetake.bind(this);
++    }
++    componentDidMount () {
++        this.unsubscribe = onPublishChange(open => {
++            if (open) {
++                this.setState(this.freshState(true), () => this.prepare());
++            } else {
++                this.setState({open: false});
++            }
++        });
++    }
++    componentWillUnmount () {
++        this.unsubscribe();
++    }
++    freshState (open) {
++        return {
++            open,
++            title: '',
++            author: loadNickname(),
++            description: '',
++            agree: false,
++            mode: 'new',
++            existing: null,
++            thumb: null,
++            busy: false,
++            error: null,
++            done: null,
++            server: undefined
++        };
++    }
++    async prepare () {
++        const title = (this.props.projectTitle || '').trim() || 'My project';
++        const existing = findMine(title);
++        this.setState({title, existing, mode: existing ? 'update' : 'new'});
++        const [server, thumb] = await Promise.all([serverUrl(), snapshot(this.props.vm)]);
++        this.setState({server, thumb});
++    }
++    async handleRetake () {
++        this.setState({thumb: await snapshot(this.props.vm)});
++    }
++    async handlePublish () {
++        const {title, author, description, agree, mode, existing, thumb} = this.state;
++        if (!title.trim() || !author.trim()) {
++            this.setState({error: 'Add a title and a nickname first.'});
++            return;
++        }
++        if (!agree) {
++            this.setState({error: 'Tick the box to say the project is OK to share.'});
++            return;
++        }
++        this.setState({busy: true, error: null});
++        try {
++            saveNickname(author.trim());
++            const sb3 = await this.props.vm.saveProjectSb3();
++            const file = await sb3BlobToStickLabBlob(sb3);
++            const result = await publishProject({
++                title: title.trim(),
++                author: author.trim(),
++                description: description.trim(),
++                file,
++                thumb: thumb && thumb.blob,
++                updateId: mode === 'update' && existing ? existing.id : null
++            });
++            this.setState({busy: false, done: result});
++        } catch (e) {
++            this.setState({busy: false, error: e.message});
++        }
++    }
++    renderField (label, key, props = {}) {
++        const Tag = props.multiline ? 'textarea' : 'input';
++        return (
++            <label className={styles.field}>
++                <span className={styles.label}>{label}</span>
++                <Tag
++                    className={styles.input}
++                    maxLength={props.max}
++                    placeholder={props.placeholder}
++                    rows={props.multiline ? 3 : undefined}
++                    value={this.state[key]}
++                    onChange={e => this.setState({[key]: e.target.value, error: null})} // eslint-disable-line react/jsx-no-bind
++                />
++                {props.hint ? <span className={styles.hint}>{props.hint}</span> : null}
++            </label>
++        );
++    }
++    renderBody () {
++        const {server, done, thumb, existing, mode, busy, error, agree} = this.state;
++        if (done) {
++            return (
++                <div className={styles.body}>
++                    <div className={styles.success}>
++                        <div className={styles.bigTick}>{'✓'}</div>
++                        <div>
++                            <b>{mode === 'update' ? 'Your project is updated on the Game Hub!' : 'Your project is on the Game Hub!'}</b>
++                            <div className={styles.hint}>{'Anyone can play it with this link:'}</div>
++                        </div>
++                    </div>
++                    <input
++                        readOnly
++                        className={styles.input}
++                        value={done.url}
++                        onFocus={e => e.target.select()} // eslint-disable-line react/jsx-no-bind
++                    />
++                    <div className={styles.buttons}>
++                        <a
++                            className={styles.primary}
++                            href={done.url}
++                            rel="noopener noreferrer"
++                            target="_blank"
++                        >{'Play it'}</a>
++                        <a
++                            className={styles.secondary}
++                            href={`${siteUrl()}games.html#community`}
++                            rel="noopener noreferrer"
++                            target="_blank"
++                        >{'Open the Game Hub'}</a>
++                        <button
++                            className={styles.secondary}
++                            onClick={this.handleClose}
++                        >{'Close'}</button>
++                    </div>
++                </div>
++            );
++        }
++        if (server === null) {
++            return (
++                <div className={styles.body}>
++                    <p>{'Publishing isn\'t switched on yet. The Stick Hubs server needs to be set up first.'}</p>
++                    <p className={styles.hint}>{'You can still save your project as a .sl file with File → Save to your computer.'}</p>
++                    <div className={styles.buttons}>
++                        <button
++                            className={styles.secondary}
++                            onClick={this.handleClose}
++                        >{'Close'}</button>
++                    </div>
++                </div>
++            );
++        }
++        return (
++            <div className={styles.body}>
++                <div className={styles.columns}>
++                    <div className={styles.form}>
++                        {this.renderField('Title', 'title', {max: 60})}
++                        {this.renderField('Your nickname', 'author', {
++                            max: 30,
++                            placeholder: 'e.g. StickFan99',
++                            hint: 'Shown with your project. Don\'t use your real full name.'
++                        })}
++                        {this.renderField('About this project (optional)', 'description', {
++                            max: 500,
++                            multiline: true,
++                            placeholder: 'How to play, controls, credits...'
++                        })}
++                    </div>
++                    <div className={styles.cover}>
++                        <span className={styles.label}>{'Cover picture'}</span>
++                        {thumb ? (
++                            <img
++                                alt="Cover"
++                                className={styles.thumb}
++                                src={thumb.url}
++                            />
++                        ) : <div className={styles.thumbEmpty}>{'...'}</div>}
++                        <button
++                            className={styles.small}
++                            onClick={this.handleRetake}
++                        >{'Use the stage as it looks now'}</button>
++                    </div>
++                </div>
++                {existing ? (
++                    <div className={styles.choice}>
++                        <label>
++                            <input
++                                checked={mode === 'update'}
++                                type="radio"
++                                onChange={() => this.setState({mode: 'update'})} // eslint-disable-line react/jsx-no-bind
++                            />
++                            {' Update my published project (same link)'}
++                        </label>
++                        <label>
++                            <input
++                                checked={mode === 'new'}
++                                type="radio"
++                                onChange={() => this.setState({mode: 'new'})} // eslint-disable-line react/jsx-no-bind
++                            />
++                            {' Publish as a new project'}
++                        </label>
++                    </div>
++                ) : null}
++                <label className={styles.agree}>
++                    <input
++                        checked={agree}
++                        type="checkbox"
++                        onChange={e => this.setState({agree: e.target.checked, error: null})} // eslint-disable-line react/jsx-no-bind
++                    />
++                    <span>{'This is my own project (or I have permission), and it\'s OK for kids to see. ' +
++                        'Everyone will be able to play it and open it in Stick Lab.'}</span>
++                </label>
++                {error ? <div className={styles.error}>{error}</div> : null}
++                <div className={styles.buttons}>
++                    <button
++                        className={styles.primary}
++                        disabled={busy || server === undefined}
++                        onClick={this.handlePublish}
++                    >{busy ? 'Publishing...' : mode === 'update' ? 'Update on the Game Hub' : 'Publish to the Game Hub'}</button>
++                    <button
++                        className={styles.secondary}
++                        disabled={busy}
++                        onClick={this.handleClose}
++                    >{'Cancel'}</button>
++                </div>
++            </div>
++        );
++    }
++    render () {
++        if (!this.state.open) return null;
++        return (
++            <div
++                className={styles.backdrop}
++                onClick={e => e.target === e.currentTarget && this.handleClose()} // eslint-disable-line react/jsx-no-bind
++            >
++                <div
++                    aria-label="Publish to the Game Hub"
++                    className={styles.window}
++                    role="dialog"
++                >
++                    <div className={styles.header}>
++                        <span>{'Publish to the Game Hub'}</span>
++                        <button
++                            className={styles.close}
++                            title="Close"
++                            onClick={this.handleClose}
++                        >{'✕'}</button>
++                    </div>
++                    {this.renderBody()}
++                </div>
++            </div>
++        );
++    }
++}
++
++PublishDialog.propTypes = {
++    projectTitle: PropTypes.string,
++    vm: PropTypes.shape({
++        runtime: PropTypes.object,
++        saveProjectSb3: PropTypes.func
++    }).isRequired
++};
++
++const mapStateToProps = state => ({
++    projectTitle: state.scratchGui.projectTitle
++});
++
++export default connect(mapStateToProps)(PublishDialog);
+diff --git a/src/components/sl-publish/publish-store.js b/src/components/sl-publish/publish-store.js
+new file mode 100644
+index 0000000..32b193c
+--- /dev/null
++++ b/src/components/sl-publish/publish-store.js
+@@ -0,0 +1,13 @@
++// Stick Lab 1.3: is the Publish window open?
++let open = false;
++const listeners = new Set();
++const isPublishOpen = () => open;
++const setPublishOpen = value => {
++    open = !!value;
++    listeners.forEach(fn => fn(open));
++};
++const onPublishChange = fn => {
++    listeners.add(fn);
++    return () => listeners.delete(fn);
++};
++export {isPublishOpen, setPublishOpen, onPublishChange};
+diff --git a/src/components/sl-publish/publish.css b/src/components/sl-publish/publish.css
+new file mode 100644
+index 0000000..4e85e51
+--- /dev/null
++++ b/src/components/sl-publish/publish.css
+@@ -0,0 +1,210 @@
++/* Stick Lab 1.3 Publish window (Aero style) */
++
++.backdrop {
++    position: fixed;
++    inset: 0;
++    z-index: 700;
++    display: flex;
++    align-items: center;
++    justify-content: center;
++    background: rgba(20, 45, 80, 0.35);
++}
++
++.window {
++    width: 40rem;
++    max-width: calc(100vw - 2rem);
++    max-height: calc(100vh - 2rem);
++    overflow: auto;
++    background: #f5f8fc;
++    border: 1px solid #1b4f8f;
++    border-radius: 6px;
++    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6), 0 10px 34px rgba(20, 50, 90, 0.4);
++    font-family: Verdana, Tahoma, "Segoe UI", sans-serif;
++    font-size: 0.8rem;
++    color: #1f3550;
++}
++
++.header {
++    display: flex;
++    align-items: center;
++    justify-content: space-between;
++    padding: 0.5rem 0.7rem;
++    background: linear-gradient(180deg, #a3d2f7 0%, #62a7e8 46%, #2a6ab8 50%, #3283d6 100%);
++    color: #ffffff;
++    font: bold 1rem "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
++    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
++    border-bottom: 1px solid #1b4f8f;
++}
++
++.close {
++    border: 1px solid rgba(255, 255, 255, 0.6);
++    border-radius: 3px;
++    background: rgba(255, 255, 255, 0.15);
++    color: #ffffff;
++    cursor: pointer;
++    font-size: 0.85rem;
++    padding: 0.1rem 0.45rem;
++}
++
++.body {
++    padding: 0.9rem 1rem 1rem;
++    display: flex;
++    flex-direction: column;
++    gap: 0.7rem;
++}
++
++.body p {
++    margin: 0;
++}
++
++.columns {
++    display: flex;
++    gap: 1rem;
++}
++
++.form {
++    flex: 1;
++    display: flex;
++    flex-direction: column;
++    gap: 0.6rem;
++}
++
++.field {
++    display: flex;
++    flex-direction: column;
++    gap: 0.2rem;
++}
++
++.label {
++    font-weight: bold;
++}
++
++.hint {
++    color: #5a6f88;
++    font-size: 0.72rem;
++}
++
++.input {
++    border: 1px solid #9db4cf;
++    border-radius: 3px;
++    padding: 0.35rem 0.45rem;
++    font: inherit;
++    color: #1f3550;
++    background: #ffffff;
++    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
++    resize: vertical;
++}
++
++.cover {
++    width: 13rem;
++    display: flex;
++    flex-direction: column;
++    gap: 0.35rem;
++}
++
++.thumb,
++.thumb-empty {
++    width: 13rem;
++    height: 9.75rem;
++    border: 1px solid #9db4cf;
++    border-radius: 3px;
++    background: #ffffff;
++    object-fit: cover;
++}
++
++.thumb-empty {
++    display: flex;
++    align-items: center;
++    justify-content: center;
++    color: #9db4cf;
++}
++
++.small {
++    border: 1px solid #9db4cf;
++    border-radius: 3px;
++    background: linear-gradient(180deg, #ffffff 0%, #edf3fa 49%, #dde8f5 50%, #e8f0f9 100%);
++    color: #1f3550;
++    font: inherit;
++    font-size: 0.72rem;
++    padding: 0.25rem 0.4rem;
++    cursor: pointer;
++}
++
++.choice {
++    display: flex;
++    gap: 1.2rem;
++    padding: 0.45rem 0.6rem;
++    border: 1px solid #c7d6e8;
++    border-radius: 4px;
++    background: #ffffff;
++}
++
++.agree {
++    display: flex;
++    gap: 0.45rem;
++    align-items: flex-start;
++    font-size: 0.75rem;
++}
++
++.error {
++    padding: 0.4rem 0.6rem;
++    border: 1px solid #e0a3a3;
++    border-radius: 4px;
++    background: #fdeeee;
++    color: #8a1f1f;
++}
++
++.buttons {
++    display: flex;
++    gap: 0.5rem;
++    justify-content: flex-end;
++}
++
++.primary,
++.secondary {
++    display: inline-flex;
++    align-items: center;
++    padding: 0.4rem 1rem;
++    border-radius: 4px;
++    font: bold 0.82rem "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
++    cursor: pointer;
++    text-decoration: none;
++}
++
++.primary {
++    border: 1px solid #1b6a2a;
++    background: linear-gradient(180deg, #a6e69a 0%, #5cc14f 45%, #2f9a2a 50%, #46b53d 100%);
++    color: #ffffff;
++    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
++    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
++}
++
++.primary:disabled {
++    filter: grayscale(0.7);
++    cursor: default;
++}
++
++.secondary {
++    border: 1px solid #9db4cf;
++    background: linear-gradient(180deg, #ffffff 0%, #edf3fa 49%, #dde8f5 50%, #e8f0f9 100%);
++    color: #1f3550;
++}
++
++.success {
++    display: flex;
++    gap: 0.7rem;
++    align-items: center;
++}
++
++.big-tick {
++    width: 2.4rem;
++    height: 2.4rem;
++    border-radius: 50%;
++    display: flex;
++    align-items: center;
++    justify-content: center;
++    background: linear-gradient(180deg, #a6e69a 0%, #2f9a2a 100%);
++    color: #ffffff;
++    font-size: 1.4rem;
++    font-weight: bold;
 +}
 diff --git a/src/components/sl-text-code/code-mode-store.js b/src/components/sl-text-code/code-mode-store.js
 new file mode 100644
@@ -3588,40 +5369,43 @@ index 1a93708..2b08868 100644
          clearTimeout(this.toolboxUpdateTimeout);
  
 diff --git a/src/containers/costume-tab.jsx b/src/containers/costume-tab.jsx
-index 86a0f10..e8b453a 100644
+index 86a0f10..695c42b 100644
 --- a/src/containers/costume-tab.jsx
 +++ b/src/containers/costume-tab.jsx
-@@ -6,6 +6,8 @@ import VM from 'scratch-vm';
+@@ -6,6 +6,9 @@ import VM from 'scratch-vm';
  
  import AssetPanel from '../components/asset-panel/asset-panel.jsx';
  import PaintEditorWrapper from './paint-editor-wrapper.jsx';
 +import AnimateEditor from '../components/sl-animate/animate-editor.jsx';
 +import animateStyles from '../components/sl-animate/animate.css';
++import LevelEditor from '../components/sl-level/level-editor.jsx';
  import {connect} from 'react-redux';
  import {handleFileUpload, costumeUpload} from '../lib/file-uploader.js';
  import errorBoundaryHOC from '../lib/error-boundary-hoc.jsx';
-@@ -75,6 +77,8 @@ class CostumeTab extends React.Component {
+@@ -75,6 +78,10 @@ class CostumeTab extends React.Component {
      constructor (props) {
          super(props);
          bindAll(this, [
 +            'handleOpenAnimate',
 +            'handleCloseAnimate',
++            'handleOpenLevel',
++            'handleCloseLevel',
              'handleSelectCostume',
              'handleDeleteCostume',
              'handleDuplicateCostume',
-@@ -95,9 +99,9 @@ class CostumeTab extends React.Component {
+@@ -95,9 +102,9 @@ class CostumeTab extends React.Component {
          } = props;
          const target = editingTarget && sprites[editingTarget] ? sprites[editingTarget] : stage;
          if (target && target.currentCostume) {
 -            this.state = {selectedCostumeIndex: target.currentCostume};
-+            this.state = {selectedCostumeIndex: target.currentCostume, animateOpen: false};
++            this.state = {selectedCostumeIndex: target.currentCostume, animateOpen: false, levelOpen: false, levelMessage: null};
          } else {
 -            this.state = {selectedCostumeIndex: 0};
-+            this.state = {selectedCostumeIndex: 0, animateOpen: false};
++            this.state = {selectedCostumeIndex: 0, animateOpen: false, levelOpen: false, levelMessage: null};
          }
      }
      componentWillReceiveProps (nextProps) {
-@@ -244,6 +248,15 @@ class CostumeTab extends React.Component {
+@@ -244,6 +251,24 @@ class CostumeTab extends React.Component {
          // https://github.com/LLK/scratch-flash/blob/9fbac92ef3d09ceca0c0782f8a08deaa79e4df69/src/ui/media/MediaInfo.as#L224-L237
          return `${Math.ceil(size[0] / resolution)} x ${Math.ceil(size[1] / resolution)}`;
      }
@@ -3634,10 +5418,19 @@ index 86a0f10..e8b453a 100644
 +            this.setState({selectedCostumeIndex: this.props.vm.editingTarget.currentCostume});
 +        }
 +    }
++    handleOpenLevel () {
++        this.setState({levelOpen: true, levelMessage: null});
++    }
++    handleCloseLevel (saved, message) {
++        this.setState({levelOpen: false, levelMessage: saved ? message : null});
++        if (saved && this.props.vm.editingTarget) {
++            this.setState({selectedCostumeIndex: this.props.vm.editingTarget.currentCostume});
++        }
++    }
      render () {
          const {
              dispatchUpdateRestore, // eslint-disable-line no-unused-vars
-@@ -274,6 +287,7 @@ class CostumeTab extends React.Component {
+@@ -274,6 +299,7 @@ class CostumeTab extends React.Component {
              dragPayload: costume
          })) : [];
          return (
@@ -3645,7 +5438,7 @@ index 86a0f10..e8b453a 100644
              <AssetPanel
                  buttons={[
                      {
-@@ -318,12 +332,43 @@ class CostumeTab extends React.Component {
+@@ -318,12 +344,67 @@ class CostumeTab extends React.Component {
                  onItemClick={this.handleSelectCostume}
              >
                  {target.costumes ?
@@ -3671,7 +5464,25 @@ index 86a0f10..e8b453a 100644
 +                                /></svg>
 +                                {'Animate'}
 +                            </button>
-+                            <span>{'Make a Flash-style animation with a timeline. Each frame becomes a costume.'}</span>
++                            <button
++                                className={animateStyles.animateBarButton}
++                                onClick={this.handleOpenLevel}
++                            >
++                                <svg
++                                    aria-hidden="true"
++                                    height="16"
++                                    viewBox="0 0 24 24"
++                                    width="16"
++                                ><path
++                                    d="M3 4 H21 V20 H3 Z M3 14 H21 M9 14 V20 M15 14 V20 M14 8 H18 V11 H14 Z"
++                                    fill="none"
++                                    stroke="currentColor"
++                                    strokeWidth="2"
++                                /></svg>
++                                {'Level editor'}
++                            </button>
++                            <span>{this.state.levelMessage ||
++                                'Animate: a Flash-style timeline. Level editor: paint a game level from tiles.'}</span>
 +                        </div>
 +                        <div className={animateStyles.withBarBody}>
 +                            <PaintEditorWrapper
@@ -3682,6 +5493,12 @@ index 86a0f10..e8b453a 100644
                      null
                  }
              </AssetPanel>
++            {this.state.levelOpen ? (
++                <LevelEditor
++                    vm={this.props.vm}
++                    onClose={this.handleCloseLevel}
++                />
++            ) : null}
 +            {this.state.animateOpen ? (
 +                <AnimateEditor
 +                    vm={this.props.vm}
@@ -4323,7 +6140,7 @@ index 0000000..b3681f7
 +export default install;
 diff --git a/src/lib/sl-duo/duo-client.js b/src/lib/sl-duo/duo-client.js
 new file mode 100644
-index 0000000..75e4e56
+index 0000000..a712943
 --- /dev/null
 +++ b/src/lib/sl-duo/duo-client.js
 @@ -0,0 +1,127 @@
@@ -4421,7 +6238,7 @@ index 0000000..75e4e56
 +                'anthropic-version': '2023-06-01',
 +                'anthropic-dangerous-direct-browser-access': 'true'
 +            },
-+            body: JSON.stringify({model: MODEL, max_tokens: 2048, system, messages, stream: true})
++            body: JSON.stringify({model: MODEL, max_tokens: 4096, system, messages, stream: true})
 +        });
 +        if (!response.ok) throw new Error(await errorFrom(response));
 +        return {text: await readStream(response, onText), remaining: null};
@@ -4454,6 +6271,153 @@ index 0000000..75e4e56
 +    loadConfig,
 +    sendToDuo
 +};
+diff --git a/src/lib/sl-duo/game-builder.js b/src/lib/sl-duo/game-builder.js
+new file mode 100644
+index 0000000..5f0f0eb
+--- /dev/null
++++ b/src/lib/sl-duo/game-builder.js
+@@ -0,0 +1,141 @@
++// Stick Lab 1.3: "Build a game" for Duo. Turns Duo's reply (one ```stick block per sprite) into
++// real sprites with simple looks and scripts.
++import {emptySprite} from '../empty-assets';
++import {getWorkspace} from '../sl-workspace-registry';
++import {workspaceToText} from '../sl-text-code/printer';
++import {applyText} from '../sl-text-code/apply';
++
++const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
++
++/** Read `sprite="Player" look="stickman"` style settings from a code block's first line. */
++const parseAttrs = info => {
++    const attrs = {};
++    const re = /([a-zA-Z]+)\s*=\s*"([^"]*)"/g;
++    let m;
++    while ((m = re.exec(info || ''))) attrs[m[1].toLowerCase()] = m[2];
++    return attrs;
++};
++
++const esc = s => String(s).replace(/[<>&"]/g, '');
++
++// Simple looks, drawn as SVG. Each returns {svg, cx, cy}.
++const LOOKS = {
++    stickman: c => ({svg: `<svg xmlns="http://www.w3.org/2000/svg" width="60" height="96" viewBox="0 0 60 96"><g fill="none" stroke="${c}" stroke-width="6" stroke-linecap="round"><line x1="30" y1="32" x2="30" y2="62"/><line x1="30" y1="40" x2="12" y2="54"/><line x1="30" y1="40" x2="48" y2="54"/><line x1="30" y1="62" x2="16" y2="90"/><line x1="30" y1="62" x2="44" y2="90"/></g><circle cx="30" cy="16" r="13" fill="${c}"/></svg>`, cx: 30, cy: 48}),
++    enemy: c => ({svg: `<svg xmlns="http://www.w3.org/2000/svg" width="60" height="96" viewBox="0 0 60 96"><g fill="none" stroke="${c}" stroke-width="6" stroke-linecap="round"><line x1="30" y1="32" x2="30" y2="62"/><line x1="30" y1="40" x2="12" y2="30"/><line x1="30" y1="40" x2="48" y2="30"/><line x1="30" y1="62" x2="16" y2="90"/><line x1="30" y1="62" x2="44" y2="90"/></g><circle cx="30" cy="16" r="13" fill="${c}"/><path d="M21 11 L28 15 M39 11 L32 15" stroke="#fff" stroke-width="3" stroke-linecap="round"/><circle cx="25" cy="18" r="2.5" fill="#fff"/><circle cx="35" cy="18" r="2.5" fill="#fff"/></svg>`, cx: 30, cy: 48}),
++    ball: c => ({svg: `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="20" fill="${c}" stroke="#00000033" stroke-width="2"/><circle cx="15" cy="14" r="6" fill="#ffffff88"/></svg>`, cx: 22, cy: 22}),
++    box: c => ({svg: `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44"><rect x="2" y="2" width="40" height="40" rx="6" fill="${c}" stroke="#00000033" stroke-width="2"/><rect x="6" y="6" width="32" height="10" rx="4" fill="#ffffff55"/></svg>`, cx: 22, cy: 22}),
++    coin: () => ({svg: '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="36" viewBox="0 0 32 36"><ellipse cx="16" cy="18" rx="14" ry="16" fill="#e0a800"/><ellipse cx="16" cy="18" rx="10" ry="12" fill="#ffd54a"/><rect x="13" y="9" width="4" height="18" rx="2" fill="#fff3b0"/></svg>', cx: 16, cy: 18}),
++    star: c => ({svg: `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="46" viewBox="0 0 48 46"><path d="M24 2 L30 17 L46 17 L33 27 L38 43 L24 33 L10 43 L15 27 L2 17 L18 17 Z" fill="${c}" stroke="#00000033" stroke-width="2" stroke-linejoin="round"/></svg>`, cx: 24, cy: 23}),
++    platform: () => ({svg: '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="24" viewBox="0 0 160 24"><rect x="0" y="0" width="160" height="24" rx="4" fill="#8a5a32"/><rect x="0" y="0" width="160" height="8" rx="4" fill="#4caf50"/></svg>', cx: 80, cy: 12}),
++    flag: () => ({svg: '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="70" viewBox="0 0 44 70"><rect x="6" y="2" width="5" height="66" fill="#6b4a2b"/><path d="M11 4 L42 13 L11 22 Z" fill="#e53935"/></svg>', cx: 8, cy: 66})
++};
++
++const BACKDROPS = {
++    day: '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="360" viewBox="0 0 480 360"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5fb4f0"/><stop offset="1" stop-color="#d8f0ff"/></linearGradient></defs><rect width="480" height="360" fill="url(#g)"/><rect y="300" width="480" height="60" fill="#8a5a32"/><rect y="300" width="480" height="14" fill="#4caf50"/></svg>',
++    night: '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="360" viewBox="0 0 480 360"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0b1030"/><stop offset="1" stop-color="#27346b"/></linearGradient></defs><rect width="480" height="360" fill="url(#g)"/><circle cx="400" cy="60" r="22" fill="#f4f1d0"/><g fill="#fff"><circle cx="60" cy="40" r="1.6"/><circle cx="140" cy="90" r="1.3"/><circle cx="230" cy="30" r="1.8"/><circle cx="320" cy="110" r="1.3"/><circle cx="90" cy="150" r="1.2"/><circle cx="270" cy="170" r="1.5"/></g><rect y="310" width="480" height="50" fill="#1d2a1d"/></svg>',
++    grass: '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="360" viewBox="0 0 480 360"><rect width="480" height="360" fill="#8fd16f"/><g fill="#7bc25b"><circle cx="60" cy="60" r="30"/><circle cx="380" cy="120" r="40"/><circle cx="200" cy="260" r="36"/><circle cx="420" cy="300" r="26"/></g></svg>',
++    space: '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="360" viewBox="0 0 480 360"><rect width="480" height="360" fill="#090b1f"/><g fill="#fff"><circle cx="40" cy="50" r="1.5"/><circle cx="120" cy="200" r="1.2"/><circle cx="200" cy="80" r="1.8"/><circle cx="300" cy="300" r="1.4"/><circle cx="380" cy="40" r="1.2"/><circle cx="440" cy="220" r="1.7"/><circle cx="260" cy="160" r="1"/></g><circle cx="410" cy="300" r="40" fill="#7e57c2"/></svg>'
++};
++
++const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
++
++const variableNames = code => {
++    const names = {vars: new Set(), lists: new Set()};
++    const re = /([$@])(?:"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))/g;
++    let m;
++    while ((m = re.exec(code))) (m[1] === '$' ? names.vars : names.lists).add(m[2] || m[3]);
++    return names;
++};
++
++const uid = () => `sl${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
++
++/**
++ * Build a game from Duo's code blocks.
++ * @param {Array<{info: string, text: string}>} parts code blocks with sprite="..." settings
++ * @param {{vm: object, getToolbox: Function}} env Stick Lab
++ * @returns {Promise<string[]>} what was made
++ */
++const buildGame = async (parts, {vm, getToolbox}) => {
++    const sections = parts.map(p => ({attrs: parseAttrs(p.info), code: p.text}))
++        .filter(s => s.attrs.sprite);
++    if (!sections.length) throw new Error('Duo\'s answer has no sprites to build.');
++    const stage = vm.runtime.getTargetForStage();
++
++    // Variables and lists are made for all sprites, so every sprite and the Stage share them.
++    for (const s of sections) {
++        const names = variableNames(s.code);
++        names.vars.forEach(n => {
++            if (!stage.lookupVariableByNameAndType(n, '')) stage.createVariable(uid(), n, '');
++        });
++        names.lists.forEach(n => {
++            if (!stage.lookupVariableByNameAndType(n, 'list')) stage.createVariable(uid(), n, 'list');
++        });
++    }
++
++    const made = [];
++    let firstSprite = null;
++    // the Stage first, then sprites in Duo's order
++    sections.sort((a, b) => (b.attrs.sprite.toLowerCase() === 'stage') - (a.attrs.sprite.toLowerCase() === 'stage'));
++    for (const {attrs, code} of sections) {
++        const isStage = attrs.sprite.toLowerCase() === 'stage';
++        let target;
++        let created = false;
++        if (isStage) {
++            target = stage;
++            vm.setEditingTarget(stage.id);
++            const backdrop = BACKDROPS[(attrs.look || '').toLowerCase()];
++            if (backdrop) {
++                const index = stage.getCostumes().findIndex(c => c.name === attrs.look.toLowerCase());
++                if (index === -1) {
++                    vm.updateSvg(stage.currentCostume, backdrop, 240, 180);
++                    stage.renameCostume(stage.currentCostume, attrs.look.toLowerCase());
++                }
++            }
++        } else {
++            const name = esc(attrs.sprite).slice(0, 40) || 'Sprite';
++            target = vm.runtime.targets.find(t => t.isOriginal && !t.isStage && t.getName() === name);
++            if (!target) {
++                await vm.addSprite(JSON.stringify(emptySprite(name, 'pop', 'look')));
++                target = vm.runtime.targets.find(t => t.isOriginal && !t.isStage && t.getName() === name) ||
++                    vm.editingTarget;
++                created = true;
++            }
++            vm.setEditingTarget(target.id);
++            if (created) {
++                const color = COLOR_RE.test(attrs.color || '') ? attrs.color : '#1e88e5';
++                const look = (LOOKS[(attrs.look || '').toLowerCase()] || LOOKS.stickman)(color);
++                vm.updateSvg(0, look.svg, look.cx, look.cy);
++                const x = parseFloat(attrs.x);
++                const y = parseFloat(attrs.y);
++                if (isFinite(x) && isFinite(y)) target.setXY(x, y);
++                const size = parseFloat(attrs.size);
++                if (isFinite(size) && size > 5) target.setSize(size);
++            }
++        }
++        if (!firstSprite && !isStage) firstSprite = target;
++        // let Stick Lab switch the script area to this sprite
++        await sleep(450);
++        const ws = getWorkspace();
++        if (!ws) throw new Error('Open the Script tab first, then try again.');
++        const current = created ? '' : workspaceToText(ws.workspace, ws.ScratchBlocks).text;
++        try {
++            applyText(`${current}\n\n${code}\n`, {
++                ScratchBlocks: ws.ScratchBlocks,
++                workspace: ws.workspace,
++                vm,
++                toolboxXML: getToolbox()
++            });
++            made.push(`${isStage ? 'the Stage' : `"${target.getName()}"`}${created ? ' (new)' : ''}`);
++            // let the new blocks reach the project before switching to the next sprite
++            await sleep(350);
++        } catch (e) {
++            made.push(`${isStage ? 'the Stage' : `"${target.getName()}"`}: its scripts didn't fit (${e.message})`);
++        }
++    }
++    if (firstSprite) vm.setEditingTarget(firstSprite.id);
++    vm.emitTargetsUpdate();
++    vm.runtime.emitProjectChanged();
++    return made;
++};
++
++export {parseAttrs, buildGame, LOOKS, BACKDROPS};
 diff --git a/src/lib/sl-format.js b/src/lib/sl-format.js
 new file mode 100644
 index 0000000..e6b14ca
@@ -4572,6 +6536,128 @@ index 0000000..e6b14ca
 +    encodeStickLabProject,
 +    sb3BlobToStickLabBlob,
 +    installStickLabLoader
++};
+diff --git a/src/lib/sl-hub/hub-client.js b/src/lib/sl-hub/hub-client.js
+new file mode 100644
+index 0000000..fb0f0ef
+--- /dev/null
++++ b/src/lib/sl-hub/hub-client.js
+@@ -0,0 +1,116 @@
++// Stick Lab 1.3: publishing projects to the Stick Hubs Game Hub.
++import {loadConfig, loadSettings} from '../sl-duo/duo-client';
++
++const MY_PROJECTS_KEY = 'stick-hub-my-projects';
++const NICKNAME_KEY = 'stick-hub-nickname';
++
++// The Stick Hubs website: the folder above /lab/ when Stick Lab runs on the website, otherwise the live site.
++const siteUrl = () => {
++    try {
++        if (/\/lab\//.test(location.pathname) && /^https?:$/.test(location.protocol)) {
++            return new URL('../', location.href).href;
++        }
++    } catch (e) {
++        // fall through
++    }
++    return 'https://stick-hubs.github.io/';
++};
++
++const serverUrl = async () => {
++    const config = await loadConfig();
++    return config.serverUrl ? config.serverUrl.replace(/\/$/, '') : null;
++};
++
++const readJson = (key, fallback) => {
++    try {
++        return JSON.parse(localStorage.getItem(key) || 'null') || fallback;
++    } catch (e) {
++        return fallback;
++    }
++};
++const writeJson = (key, value) => {
++    try {
++        localStorage.setItem(key, JSON.stringify(value));
++    } catch (e) {
++        // storage blocked
++    }
++};
++
++// Projects this device published: {id: {editKey, title, published}}
++const myProjects = () => readJson(MY_PROJECTS_KEY, {});
++const rememberProject = (id, editKey, title) => {
++    const all = myProjects();
++    all[id] = {...(all[id] || {}), title, published: new Date().toISOString()};
++    if (editKey) all[id].editKey = editKey;
++    writeJson(MY_PROJECTS_KEY, all);
++};
++const findMine = title => {
++    const all = myProjects();
++    const id = Object.keys(all).find(k => all[k].title === title && all[k].editKey);
++    return id ? {id, ...all[id]} : null;
++};
++
++const loadNickname = () => {
++    try {
++        return localStorage.getItem(NICKNAME_KEY) || '';
++    } catch (e) {
++        return '';
++    }
++};
++const saveNickname = name => {
++    try {
++        localStorage.setItem(NICKNAME_KEY, name);
++    } catch (e) {
++        // ignore
++    }
++};
++
++const playUrl = id => `${siteUrl()}hub-play.html?id=${encodeURIComponent(id)}`;
++
++const errorFrom = async response => {
++    try {
++        const body = await response.json();
++        return body.error || `Error ${response.status}`;
++    } catch (e) {
++        return `Error ${response.status}`;
++    }
++};
++
++/**
++ * Publish (or update) a project on the Game Hub.
++ * @returns {Promise<{id: string, url: string}>} where it can be played
++ */
++const publishProject = async ({title, author, description, file, thumb, updateId}) => {
++    const server = await serverUrl();
++    if (!server) throw new Error('Publishing isn\'t switched on yet: the Stick Hubs server hasn\'t been set up.');
++    const form = new FormData();
++    form.append('title', title);
++    form.append('author', author);
++    form.append('description', description || '');
++    form.append('file', file, 'project.sl');
++    if (thumb) form.append('thumb', thumb, 'cover.jpg');
++    const headers = {};
++    if (updateId) {
++        const mine = myProjects()[updateId];
++        form.append('id', updateId);
++        form.append('editKey', (mine && mine.editKey) || '');
++    }
++    const ownerPass = loadSettings().ownerPass;
++    if (ownerPass) headers['x-duo-owner'] = ownerPass;
++    const response = await fetch(`${server}/hub/publish`, {method: 'POST', body: form, headers});
++    if (!response.ok) throw new Error(await errorFrom(response));
++    const body = await response.json();
++    rememberProject(body.id, body.editKey, title);
++    return {id: body.id, url: playUrl(body.id)};
++};
++
++export {
++    siteUrl,
++    serverUrl,
++    myProjects,
++    findMine,
++    loadNickname,
++    saveNickname,
++    playUrl,
++    publishProject
 +};
 diff --git a/src/lib/sl-text-code/aliases.js b/src/lib/sl-text-code/aliases.js
 new file mode 100644

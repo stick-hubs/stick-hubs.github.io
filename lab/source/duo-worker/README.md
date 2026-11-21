@@ -1,4 +1,6 @@
-# Stick Lab Duo server
+# Stick Hubs server (Stick Lab Duo + Game Hub)
+
+This one Cloudflare Worker runs two things: Stick Lab Duo and the Game Hub, where people publish their Stick Lab projects.
 
 Stick Lab Duo talks to Claude Opus 5.5 through this small Cloudflare Worker, so your Anthropic
 API key is never in the website's code. Each person gets DAILY_LIMIT free messages a day (default 10),
@@ -10,7 +12,7 @@ You need a free Cloudflare account and an Anthropic API key (console.anthropic.c
 
 1. Install Node.js, then in this folder run:
    `npx wrangler login`
-2. Make the storage for daily counts:
+2. Make the storage for daily counts and Game Hub projects:
    `npx wrangler kv namespace create DUO_KV`
    Paste the `id` it prints into `wrangler.toml` (replace PASTE_THE_KV_ID_HERE).
 3. Add your secrets (you'll be asked to paste each one):
@@ -18,12 +20,28 @@ You need a free Cloudflare account and an Anthropic API key (console.anthropic.c
    `npx wrangler secret put OWNER_PASS`   (make up a long secret phrase)
 4. Publish it:
    `npx wrangler deploy`
-   It prints an address like `https://stick-lab-duo.YOURNAME.workers.dev`.
+   It prints an address like `https://stick-hubs-server.YOURNAME.workers.dev`.
 5. Put that address in `lab/duo-config.json` on the website:
-   `{ "serverUrl": "https://stick-lab-duo.YOURNAME.workers.dev" }`
+   `{ "serverUrl": "https://stick-hubs-server.YOURNAME.workers.dev" }`
 6. On your own device, open Stick Lab, click Duo, then the gear, and type your owner pass.
 
 Change `DAILY_LIMIT` (per person) or `GLOBAL_DAILY_LIMIT` (everyone together) in `wrangler.toml` and deploy again,
 or edit them in the Cloudflare dashboard under Settings -> Variables and Secrets.
-At about $0.03-0.05 per message, 200 messages a day is roughly $6-10 a day at most.
+At about $0.03-0.10 per message ("Build a game" answers are the longest), 200 messages a day is roughly $6-20 a day at most.
 Every message is billed to your Anthropic account, so set a monthly spend limit in the Anthropic console.
+
+## The Game Hub
+
+The same address also runs the Game Hub, so step 5 above switches on both Duo and publishing.
+Nothing else to set up: the Game Hub page (games.html, "Community projects") and the play page (hub-play.html)
+read the same `lab/duo-config.json`.
+
+- People press **Publish** in Stick Lab. Each person can publish or update `PUBLISH_DAILY_LIMIT` times a day (default 5).
+- Projects can be up to 10 MB. Titles, nicknames and descriptions with blocked words are refused.
+- Anyone can press **Report** on a project. After 3 reports from different people it is hidden from the list.
+- The device that published a project can update it or remove it (Stick Lab keeps a secret edit key on that device).
+- **You can remove any project:** with your owner pass saved in Duo settings on your device, open the project's play page,
+  press About, then "Remove from the Game Hub".
+
+Cloudflare's free plan allows 1,000 storage writes a day. Each publish uses about 4 and each Duo message 2,
+so the free plan covers roughly 100 publishes and 300 Duo messages a day. The paid Workers plan ($5 a month) raises this a lot.
