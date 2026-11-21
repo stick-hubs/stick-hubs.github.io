@@ -294,3 +294,6 @@ footer {
 
 /* anything marked hidden stays hidden, even buttons */
 [hidden] { display: none !important; }
+/* coming-soon game cards */
+.btn.off, .btn.off:hover { color: #888; background: #f2f2f2; border-color: #ccc; cursor: default; }
+.card.soon img { filter: saturate(.85); }

@@ -9471,6 +9471,52 @@ index 0000000..e48c765
 +};
 +
 +export {installRagdoll};
+diff --git a/src/lib/sl-resolution/auto-stage.js b/src/lib/sl-resolution/auto-stage.js
+new file mode 100644
+index 0000000..0c460e0
+--- /dev/null
++++ b/src/lib/sl-resolution/auto-stage.js
+@@ -0,0 +1,40 @@
++// Stick Lab 1.5: new projects get a stage shaped like the screen they are made on,
++// instead of always the old 4:3 TV shape (480 x 360). The height stays 360, so
++// y positions work like they always did; wide screens just get more room left and right.
++// Projects that were already saved keep the size they were saved with.
++
++const STORAGE_KEY = 'sticklab-auto-stage';
++const HEIGHT = 360;
++const MIN_WIDTH = 480;
++const MAX_WIDTH = 720; // 2:1, wide phones
++
++const isOn = () => {
++    try {
++        return localStorage.getItem(STORAGE_KEY) !== 'off';
++    } catch (e) {
++        return true;
++    }
++};
++
++/** The stage size for this device: landscape shape of the screen, 360 tall. */
++const autoStageSize = () => {
++    if (typeof window === 'undefined' || !window.screen) return {width: MIN_WIDTH, height: HEIGHT};
++    const a = window.screen.width;
++    const b = window.screen.height;
++    const ratio = Math.max(a, b) / Math.max(1, Math.min(a, b));
++    // close to 4:3 (iPads are about 1.33 - 1.44): keep the classic size
++    if (!isFinite(ratio) || ratio < 1.45) return {width: MIN_WIDTH, height: HEIGHT};
++    let width = Math.round(HEIGHT * ratio / 2) * 2;
++    width = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, width));
++    return {width, height: HEIGHT};
++};
++
++const applyAutoStage = vm => {
++    if (!isOn()) return;
++    const {width, height} = autoStageSize();
++    if (vm.runtime.stageWidth !== width || vm.runtime.stageHeight !== height) {
++        vm.setStageSize(width, height);
++    }
++};
++
++export {applyAutoStage, autoStageSize, STORAGE_KEY};
 diff --git a/src/lib/sl-text-code/aliases.js b/src/lib/sl-text-code/aliases.js
 new file mode 100644
 index 0000000..0684e97
@@ -11416,6 +11462,36 @@ index d7b9f20..64ff40c 100644
      ACCENT_MAP,
  
      GUI_LIGHT,
+diff --git a/src/lib/vm-manager-hoc.jsx b/src/lib/vm-manager-hoc.jsx
+index d88dda1..dcbc168 100644
+--- a/src/lib/vm-manager-hoc.jsx
++++ b/src/lib/vm-manager-hoc.jsx
+@@ -14,6 +14,7 @@ import {
+     projectError
+ } from '../reducers/project-state';
+ import log from './log';
++import {applyAutoStage} from './sl-resolution/auto-stage';
+ 
+ /**
+  * List of fonts that could be used by security prompts.
+@@ -71,8 +72,17 @@ const vmManagerHOC = function (WrappedComponent) {
+         loadProject () {
+             // tw: stop when loading new project
+             this.props.vm.quit();
++            // Stick Lab: start every project at the classic size; its own saved size (if any) is applied while loading
++            if (this.props.vm.runtime.stageWidth !== 480 || this.props.vm.runtime.stageHeight !== 360) {
++                this.props.vm.setStageSize(480, 360);
++            }
+             return this.props.vm.loadProject(this.props.projectData)
+                 .then(() => {
++                    // Stick Lab: a brand new project gets a stage shaped like this screen
++                    if (this.props.loadingState === 'LOADING_VM_NEW_DEFAULT' && !this.props.isPlayerOnly &&
++                        !/[?&]project_url=/.test(location.search)) {
++                        applyAutoStage(this.props.vm);
++                    }
+                     this.props.onLoadedProject(this.props.loadingState, this.props.canSave);
+                     // Wrap in a setTimeout because skin loading in
+                     // the renderer can be async.
 diff --git a/src/playground/render-interface.jsx b/src/playground/render-interface.jsx
 index 8f417c7..2d5dcda 100644
 --- a/src/playground/render-interface.jsx

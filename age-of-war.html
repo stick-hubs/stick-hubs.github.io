@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Age of War Mobile · Stick Hubs</title>
+<meta name="description" content="Age of War Mobile: train units through the Stone Age, Medieval and Modern ages, and call down a meteor.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="canonical" href="https://stick-hubs.github.io/physics-playground.html">
+<meta property="og:title" content="Age of War Mobile · Stick Hubs">
+<meta property="og:description" content="Age of War Mobile: train units through the Stone Age, Medieval and Modern ages, and call down a meteor.">
+<meta property="og:image" content="https://stick-hubs.github.io/games/physicsplayground.jpg">
+<style>
+html, body { margin: 0; height: 100%; background: #0f1d33; color: #fff; font: 14px system-ui, -apple-system, "Segoe UI", sans-serif; }
+body { display: flex; flex-direction: column; }
+.bar { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 6px 12px; background: linear-gradient(180deg, #a3d2f7 0%, #62a7e8 46%, #2a6ab8 50%, #3283d6 100%); border-bottom: 1px solid #1b4f8f; }
+.bar a.back, .bar button { font: bold 13px system-ui, sans-serif; color: #1f3550; background: linear-gradient(180deg, #fff 0%, #edf3fa 49%, #dde8f5 50%, #e8f0f9 100%); border: 1px solid #1b4f8f; border-radius: 4px; padding: 4px 10px; cursor: pointer; text-decoration: none; }
+.bar .title { font: bold 16px "Trebuchet MS", "Segoe UI", sans-serif; text-shadow: 0 1px 1px rgba(0,0,0,.35); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar .tip { margin-left: auto; font-size: 12px; opacity: .95; text-shadow: 0 1px 1px rgba(0,0,0,.35); }
+iframe { flex: 1; width: 100%; border: 0; background: #fff; }
+.msg { margin: 40px auto; max-width: 520px; text-align: center; font-size: 16px; }
+
+</style>
+</head>
+<body>
+<div class="bar"><a class="back" href="games.html">&larr; Game Hub</a><span class="title" id="title">Age of War Mobile</span><span class="tip">Tap the unit buttons to train your army</span></div>
+<iframe id="game" title="Age of War Mobile" allow="fullscreen; autoplay; gamepad" allowfullscreen></iframe>
+<script>
+(function () {
+  var frame = document.getElementById('game');
+  function play(url) {
+    frame.src = 'lab/embed.html?autoplay&project_url=' + encodeURIComponent(url);
+    frame.addEventListener('load', function () { try { frame.focus(); } catch (e) {} });
+  }
+  window.playInLab = play;
+  play(new URL('games/Age_of_War_Mobile.sl', location.href).href);
+})();
+</script>
+
+</body>
+</html>

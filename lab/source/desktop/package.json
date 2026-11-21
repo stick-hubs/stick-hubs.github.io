@@ -1,7 +1,7 @@
 {
   "name": "stick-lab",
   "productName": "Stick Lab",
-  "version": "1.0.0",
+  "version": "1.5.0",
   "description": "Stick Lab - make games with blocks. By Stick Hubs, based on TurboWarp.",
   "author": "Stick Hubs",
   "license": "GPL-3.0",
@@ -38,7 +38,7 @@
     "win": {
       "target": [
         {
-          "target": "nsis",
+          "target": "portable",
           "arch": [
             "x64"
           ]
@@ -70,6 +70,9 @@
       "createStartMenuShortcut": true,
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false
+    },
+    "portable": {
+      "artifactName": "Stick_Lab-windows.exe"
     }
   },
   "devDependencies": {
