@@ -4023,16 +4023,16 @@ index 0000000..e1cf04e
 +};
 diff --git a/src/components/sl-publish/publish-dialog.jsx b/src/components/sl-publish/publish-dialog.jsx
 new file mode 100644
-index 0000000..4c355da
+index 0000000..d0afa4e
 --- /dev/null
 +++ b/src/components/sl-publish/publish-dialog.jsx
-@@ -0,0 +1,297 @@
+@@ -0,0 +1,300 @@
 +// Stick Lab 1.3: publish the project to the Stick Hubs Game Hub.
 +import React from 'react';
 +import PropTypes from 'prop-types';
 +import {connect} from 'react-redux';
 +import {isPublishOpen, setPublishOpen, onPublishChange} from './publish-store';
-+import {serverUrl, findMine, loadNickname, saveNickname, publishProject, siteUrl} from '../../lib/sl-hub/hub-client';
++import {serverUrl, findMine, loadNickname, saveNickname, publishProject, siteUrl, account} from '../../lib/sl-hub/hub-client';
 +import {sb3BlobToStickLabBlob} from '../../lib/sl-format';
 +import styles from './publish.css';
 +
@@ -4088,7 +4088,8 @@ index 0000000..4c355da
 +        return {
 +            open,
 +            title: '',
-+            author: loadNickname(),
++            author: (account() && account().profile.displayName) || loadNickname(),
++            signedIn: account(),
 +            description: '',
 +            agree: false,
 +            mode: 'new',
@@ -4216,7 +4217,9 @@ index 0000000..4c355da
 +                        {this.renderField('Your nickname', 'author', {
 +                            max: 30,
 +                            placeholder: 'e.g. StickFan99',
-+                            hint: 'Shown with your project. Don\'t use your real full name.'
++                            hint: this.state.signedIn ?
++                                `Signed in as @${this.state.signedIn.profile.login}: it will show on your Stick Hubs profile.` :
++                                'Shown with your project. Don\'t use your real full name. Sign in on the Stick Hubs website to add it to your profile.'
 +                        })}
 +                        {this.renderField('About this project (optional)', 'description', {
 +                            max: 500,
@@ -6545,10 +6548,10 @@ index 0000000..e6b14ca
 +};
 diff --git a/src/lib/sl-hub/hub-client.js b/src/lib/sl-hub/hub-client.js
 new file mode 100644
-index 0000000..fb0f0ef
+index 0000000..9838674
 --- /dev/null
 +++ b/src/lib/sl-hub/hub-client.js
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,130 @@
 +// Stick Lab 1.3: publishing projects to the Stick Hubs Game Hub.
 +import {loadConfig, loadSettings} from '../sl-duo/duo-client';
 +
@@ -6616,6 +6619,17 @@ index 0000000..fb0f0ef
 +    }
 +};
 +
++// Signed in to Stick Hubs on the website (same browser): {token, profile}
++const account = () => {
++    try {
++        const token = localStorage.getItem('stick-hubs-session');
++        const profile = JSON.parse(localStorage.getItem('stick-hubs-account') || 'null');
++        return token && profile ? {token, profile} : null;
++    } catch (e) {
++        return null;
++    }
++};
++
 +const playUrl = id => `${siteUrl()}hub-play.html?id=${encodeURIComponent(id)}`;
 +
 +const errorFrom = async response => {
@@ -6646,6 +6660,8 @@ index 0000000..fb0f0ef
 +        form.append('id', updateId);
 +        form.append('editKey', (mine && mine.editKey) || '');
 +    }
++    const signedIn = account();
++    if (signedIn) headers.authorization = `Bearer ${signedIn.token}`;
 +    const ownerPass = loadSettings().ownerPass;
 +    if (ownerPass) headers['x-duo-owner'] = ownerPass;
 +    const response = await fetch(`${server}/hub/publish`, {method: 'POST', body: form, headers});
@@ -6661,6 +6677,7 @@ index 0000000..fb0f0ef
 +    myProjects,
 +    findMine,
 +    loadNickname,
++    account,
 +    saveNickname,
 +    playUrl,
 +    publishProject

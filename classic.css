@@ -244,3 +244,53 @@ footer {
 @media (min-width: 821px) {
   .sm-side .sm-cta { margin-right: 96px; }
 }
+
+/* ---- Stick Hubs account button in the header ---- */
+.sm-side .sm-account { order: 1; display: inline-flex; align-items: center; gap: 7px; margin: 0 8px 14px auto; padding: 4px 12px 4px 4px;
+  border-radius: 999px; border: 1px solid #9db4cf; background: linear-gradient(180deg, #ffffff 0%, #edf3fa 49%, #dde8f5 50%, #e8f0f9 100%);
+  color: #1f3550; font: bold 13px/1 var(--body); text-decoration: none; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sm-side .sm-account:not(:has(img)) { padding: 7px 14px; }
+.sm-side .sm-account img { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; border: 2px solid var(--acc, #2a6ab8); background: #fff; flex: 0 0 auto; }
+.sm-side .sm-account:hover { border-color: #2a6ab8; }
+.sm-side .sm-account ~ .sm-cta { margin-left: 0; }
+@media (max-width: 820px) { .sm-side .sm-account { margin: 0 8px 12px auto; } }
+
+/* ---- account and profile pages ---- */
+.acc-box { margin-top: 20px; padding: 18px 20px; border: 1px solid var(--c-line, #c7d6e8); border-radius: 6px; background: #f6f9fc; }
+.acc-gh { font-size: 18px; }
+.acc-gh svg { margin-right: 4px; }
+.acc-note { margin-top: 10px; color: #5a6f88; font-size: 13px; max-width: 70ch; }
+.acc-error { margin-top: 16px; padding: 10px 14px; border: 1px solid #e0a3a3; border-radius: 6px; background: #fdeeee; color: #8a1f1f; }
+.acc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+.acc-panel { padding: 16px 18px; border: 1px solid #c7d6e8; border-radius: 6px; background: #f8fbfe; display: flex; flex-direction: column; gap: 10px; }
+.acc-panel h2 { font-size: 18px; color: #1f3550; margin-top: 4px; }
+.acc-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.acc-bottom { margin-top: 18px; }
+.acc-file { cursor: pointer; }
+.acc-field { display: flex; flex-direction: column; gap: 4px; font-weight: bold; font-size: 14px; color: #1f3550; }
+.acc-field input, .acc-field textarea, .acc-field select { font: 15px var(--body); padding: 8px 10px; border: 1px solid #9db4cf; border-radius: 6px; background: #fff; color: #1f3550; resize: vertical; }
+.acc-swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.acc-swatch { width: 54px; height: 34px; border-radius: 6px; border: 2px solid #fff; box-shadow: 0 0 0 1px #9db4cf; cursor: pointer; padding: 0; }
+.acc-swatch.round { width: 34px; border-radius: 50%; }
+.acc-swatch.on { box-shadow: 0 0 0 3px #1f3550; }
+.acc-saved { color: #2f9a2a; font-weight: bold; }
+.profile-card { margin-top: 18px; border: 1px solid #b6c8de; border-radius: 10px; overflow: hidden; background: #fff; box-shadow: 0 2px 10px rgba(20,50,90,.12); --acc: #2a6ab8; }
+.pc-banner { height: 120px; background-size: cover; background-position: center; border-bottom: 4px solid var(--acc); }
+.profile-card.big .pc-banner { height: 200px; }
+.pc-body { position: relative; padding: 0 20px 18px 152px; min-height: 96px; }
+.pc-avatar { position: absolute; left: 20px; top: -56px; width: 116px; height: 116px; border-radius: 50%; object-fit: cover; background: #fff; border: 5px solid var(--acc); box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+.pc-names { padding-top: 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.pc-name { font: bold 26px/1.2 var(--display); color: #1f3550; overflow-wrap: anywhere; }
+.pc-login { color: #6a7f98; font-size: 14px; }
+.pc-bio { margin-top: 8px; white-space: pre-wrap; overflow-wrap: anywhere; color: #333; }
+.pc-fav, .pc-joined { display: inline-block; margin-top: 8px; margin-right: 10px; font-size: 13px; font-weight: bold; color: var(--acc); }
+.pc-fav:empty, .pc-joined:empty, .pc-bio:empty { display: none; }
+.hub-by a { color: inherit; }
+@media (max-width: 700px) {
+  .acc-grid { grid-template-columns: 1fr; }
+  .pc-body { padding: 70px 16px 16px; }
+  .pc-avatar { left: 16px; width: 100px; height: 100px; top: -50px; }
+}
+
+/* anything marked hidden stays hidden, even buttons */
+[hidden] { display: none !important; }

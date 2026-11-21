@@ -121,6 +121,7 @@ footer a.v16 { display: inline-block; margin-left: 10px; padding: 5px 12px; bord
 .card .hub-noimg { aspect-ratio: 4 / 3; display: flex; align-items: center; justify-content: center; background: linear-gradient(180deg, #5fb4f0, #d8f0ff); }
 </style>
 <script src="lang.js" defer></script>
+<script src="account.js" defer></script>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="favicon.ico" sizes="48x48">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -215,7 +216,11 @@ footer a.v16 { display: inline-block; margin-left: 10px; padding: 5px 12px; bord
         var ph = el('div', 'hub-noimg'); var ic = el('img'); ic.src = 'icon-192.png'; ic.alt = ''; ic.style.width = '96px'; ic.style.aspectRatio = '1'; ph.appendChild(ic); card.appendChild(ph);
       }
       var inner = el('div', 'in');
-      inner.appendChild(el('span', 'hub-by', 'by ' + p.author + ' · ' + new Date(p.updated || p.created).toLocaleDateString()));
+      var by = el('span', 'hub-by', 'by ');
+      if (p.ownerLogin) { var who = el('a', null, p.author); who.href = 'profile.html?u=' + encodeURIComponent(p.ownerLogin); by.appendChild(who); }
+      else by.appendChild(document.createTextNode(p.author));
+      by.appendChild(document.createTextNode(' · ' + new Date(p.updated || p.created).toLocaleDateString()));
+      inner.appendChild(by);
       inner.appendChild(el('h3', null, p.title));
       if (p.description) inner.appendChild(el('p', 'hub-desc', p.description));
       var btns = el('div', 'btns');

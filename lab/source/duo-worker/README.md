@@ -48,3 +48,21 @@ read the same `lab/duo-config.json`.
 
 Cloudflare's free plan allows 1,000 storage writes a day. Each publish uses about 4 and each Duo message 2,
 so the free plan covers roughly 100 publishes and 300 Duo messages a day. The paid Workers plan ($5 a month) raises this a lot.
+
+## Accounts (sign in with GitHub)
+
+Accounts are free too. They need a GitHub "OAuth App" so people can sign in with GitHub:
+
+1. On GitHub, go to Settings -> Developer settings -> OAuth Apps -> New OAuth App.
+2. Application name: `Stick Hubs`. Homepage URL: `https://stick-hubs.github.io`.
+   Authorization callback URL: your server address + `/auth/callback`,
+   for example `https://stick-hubs-server.YOURNAME.workers.dev/auth/callback`.
+3. Click Register application. Copy the **Client ID**, then click "Generate a new client secret" and copy the secret.
+4. In Cloudflare, on your Worker: Settings -> Variables and Secrets -> Add:
+   - type Text, name `GITHUB_CLIENT_ID`, value: the Client ID
+   - type Secret, name `GITHUB_CLIENT_SECRET`, value: the client secret
+   Then Deploy.
+
+Stick Hubs only reads each person's public GitHub username and picture (no email, no repositories).
+Profiles are public. Anyone can report a profile; after 3 reports its pictures, name and bio are removed.
+With your owner pass saved in Duo settings on your device, the profile page shows "Owner: reset this profile".

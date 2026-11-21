@@ -480,7 +480,11 @@ window.hubReady.catch(function () {});
       var settings = readJson('stick-lab-duo-settings') || {};
       var panel = el('div', 'hub-about'); panel.hidden = true;
       panel.appendChild(el('b', null, p.title));
-      panel.appendChild(el('div', 'hub-by', 'by ' + p.author + ' · ' + new Date(p.updated || p.created).toLocaleDateString()));
+      var by = el('div', 'hub-by', 'by ');
+      if (p.ownerLogin) { var who = el('a', null, p.author); who.href = 'profile.html?u=' + encodeURIComponent(p.ownerLogin); who.style.color = 'inherit'; by.appendChild(who); }
+      else by.appendChild(document.createTextNode(p.author));
+      by.appendChild(document.createTextNode(' · ' + new Date(p.updated || p.created).toLocaleDateString()));
+      panel.appendChild(by);
       if (p.description) panel.appendChild(el('p', null, p.description));
       var row = el('div', 'hub-row');
       var open = el('a', 'hub-btn', 'Open in Stick Lab');
@@ -493,12 +497,16 @@ window.hubReady.catch(function () {});
           .then(function () { report.textContent = 'Reported. Thank you!'; report.disabled = true; });
       };
       row.appendChild(report);
-      if ((mine && mine.editKey) || settings.ownerPass) {
+      var acct = null; try { acct = JSON.parse(localStorage.getItem('stick-hubs-account') || 'null'); } catch (e) {}
+      var session = null; try { session = localStorage.getItem('stick-hubs-session'); } catch (e) {}
+      var myAccount = acct && session && p.ownerLogin && acct.login.toLowerCase() === p.ownerLogin.toLowerCase();
+      if ((mine && mine.editKey) || settings.ownerPass || myAccount) {
         var del = el('button', 'hub-btn hub-del', 'Remove from the Game Hub');
         del.onclick = function () {
           if (!confirm('Remove "' + p.title + '" from the Game Hub? This can\'t be undone.')) return;
           var headers = {'content-type': 'application/json'};
           if (settings.ownerPass) headers['x-duo-owner'] = settings.ownerPass;
+          if (session) headers.authorization = 'Bearer ' + session;
           fetch(hub.server + '/hub/delete', {method: 'POST', headers: headers, body: JSON.stringify({id: p.id, editKey: mine && mine.editKey})})
             .then(function (r) { return r.json(); }).then(function (b) {
               if (b.ok) location.href = 'games.html#community'; else alert(b.error || 'Could not remove it.');

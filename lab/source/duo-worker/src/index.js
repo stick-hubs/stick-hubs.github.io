@@ -9,8 +9,12 @@
 //   DAILY_LIMIT          Duo messages per person per day for everyone else (default 10)
 //   GLOBAL_DAILY_LIMIT   Duo messages per day for everyone together, so the bill can't run away (default 200)
 //   PUBLISH_DAILY_LIMIT  projects one person can publish or update per day (default 5)
+//   SITE_URL             the website (default https://stick-hubs.github.io)
+// Accounts (sign in with GitHub) need a GitHub OAuth App:
+//   GITHUB_CLIENT_ID     (variable) the app's Client ID
+//   GITHUB_CLIENT_SECRET (secret)   the app's client secret
 // KV namespace binding:
-//   DUO_KV               stores Duo message counts and the Game Hub projects
+//   DUO_KV               stores Duo message counts, Game Hub projects and accounts
 
 const MODEL = 'claude-opus-5-5';
 const MAX_TOKENS = 4096;
@@ -31,7 +35,7 @@ const ALLOWED_ORIGINS = [
 const corsHeaders = origin => ({
     'Access-Control-Allow-Origin': ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0],
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'content-type, x-duo-owner',
+    'Access-Control-Allow-Headers': 'content-type, x-duo-owner, authorization',
     'Access-Control-Expose-Headers': 'x-duo-remaining, x-duo-limit',
     'Vary': 'Origin'
 });
@@ -196,7 +200,8 @@ const writeIndex = (env, index) => env.DUO_KV.put('hub:index', JSON.stringify(in
 // What everyone may see about a project (never the edit key hash).
 const publicInfo = p => ({
     id: p.id, title: p.title, author: p.author, description: p.description,
-    created: p.created, updated: p.updated, size: p.size, thumbType: p.thumbType
+    created: p.created, updated: p.updated, size: p.size, thumbType: p.thumbType,
+    ownerLogin: p.ownerLogin || null
 });
 
 const isSlFile = bytes => {
@@ -236,6 +241,7 @@ const handlePublish = async (request, env, cors) => {
     }
 
     const owner = isOwner(request, env);
+    const user = await sessionUser(request, env);
     if (!owner) {
         const limit = Math.max(1, parseInt(env.PUBLISH_DAILY_LIMIT || '5', 10));
         const key = `hub:pub:${today()}:${clientIp(request)}`;
@@ -255,7 +261,8 @@ const handlePublish = async (request, env, cors) => {
         entry = index.find(p => p.id === updateId);
         if (!entry) return json(404, {error: 'That project is no longer on the Game Hub. Publish it as a new project.'}, cors);
         const given = cleanText(form.get('editKey'), 100);
-        if (!owner && !sameSecret(await sha256(given), entry.keyHash)) {
+        const isAuthor = (user && entry.ownerId === user.id) || sameSecret(await sha256(given), entry.keyHash);
+        if (!owner && !isAuthor) {
             return json(403, {error: 'Only the device that published this project can update it.'}, cors);
         }
         Object.assign(entry, {title, author, description, updated: now, size: bytes.length});
@@ -267,6 +274,10 @@ const handlePublish = async (request, env, cors) => {
             id: randomId(8), title, author, description, created: now, updated: now,
             size: bytes.length, thumbType, keyHash: await sha256(editKey), reports: 0, hidden: false
         };
+    }
+    if (user && !entry.ownerId) {
+        entry.ownerId = user.id;
+        entry.ownerLogin = user.login;
     }
     await env.DUO_KV.put(`hub:file:${entry.id}`, bytes);
     if (thumbBytes) await env.DUO_KV.put(`hub:thumb:${entry.id}`, thumbBytes);
@@ -333,12 +344,271 @@ const handleDelete = async (request, env, cors) => {
     const index = await readIndex(env);
     const entry = index.find(p => p.id === id);
     if (!entry) return json(404, {error: 'Not found'}, cors);
-    const allowed = isOwner(request, env) || sameSecret(await sha256(cleanText(body.editKey, 100)), entry.keyHash);
+    const user = await sessionUser(request, env);
+    const allowed = isOwner(request, env) || (user && entry.ownerId === user.id) ||
+        sameSecret(await sha256(cleanText(body.editKey, 100)), entry.keyHash);
     if (!allowed) return json(403, {error: 'Only the person who published this project can remove it.'}, cors);
     index.splice(index.indexOf(entry), 1);
     await writeIndex(env, index);
     await Promise.all([env.DUO_KV.delete(`hub:file:${id}`), env.DUO_KV.delete(`hub:thumb:${id}`)]);
     return json(200, {ok: true}, cors);
+};
+
+
+// ---------------------------------------------------------------- Accounts (sign in with GitHub)
+//
+// KV keys:
+//   user:<githubId>      the profile (JSON)
+//   login:<login>        githubId for a GitHub username (lower case)
+//   sess:<token-hash>    githubId for a signed-in device (expires after 30 days)
+//   img:<kind>:<id>      profile picture or banner image
+//   urep:<id>:<ip>       this person already reported this profile
+
+const SESSION_DAYS = 30;
+const MAX_AVATAR = 300 * 1024;
+const MAX_BANNER = 600 * 1024;
+const ACCENTS = ['#2a6ab8', '#2f9a2a', '#e53935', '#fb8c00', '#8e24aa', '#00897b', '#f6b93b', '#455a64'];
+const BANNERS = ['sky', 'sunset', 'night', 'forest', 'lava', 'ocean'];
+const FAVORITES = ['', 'Stick Legions II', 'Battle Chess', 'Sort It!', 'Age of War Mobile', 'Stick Lab'];
+
+const siteUrl = env => (env.SITE_URL || 'https://stick-hubs.github.io').replace(/\/$/, '');
+
+const hmac = async (secret, text) => {
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), {name: 'HMAC', hash: 'SHA-256'}, false, ['sign']);
+    const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(sig), b => b.toString(16).padStart(2, '0')).join('');
+};
+
+const sessionUser = async (request, env) => {
+    const auth = request.headers.get('authorization') || '';
+    const m = /^Bearer ([a-z0-9]{20,80})$/i.exec(auth);
+    if (!m) return null;
+    const id = await env.DUO_KV.get(`sess:${await sha256(m[1])}`);
+    if (!id) return null;
+    try {
+        return JSON.parse(await env.DUO_KV.get(`user:${id}`) || 'null');
+    } catch (e) {
+        return null;
+    }
+};
+
+const imageUrl = (base, kind, user) => (user[`${kind}Version`] ? `${base}/img/${kind}/${user.id}?v=${user[`${kind}Version`]}` : null);
+
+// What everyone may see about an account.
+const publicProfile = (user, base) => ({
+    login: user.login,
+    displayName: user.displayName || user.login,
+    bio: user.bio || '',
+    accent: user.accent || ACCENTS[0],
+    bannerPreset: user.bannerPreset || 'sky',
+    favorite: user.favorite || '',
+    joined: user.created,
+    avatar: imageUrl(base, 'avatar', user) || user.githubAvatar || null,
+    banner: imageUrl(base, 'banner', user)
+});
+
+// Where to go back to after signing in: only the Stick Hubs website or a test copy of it.
+const safeReturn = (value, env) => {
+    try {
+        const url = new URL(value);
+        if (ALLOWED_ORIGINS.includes(url.origin) || url.origin === new URL(siteUrl(env)).origin) return url.href.split('#')[0];
+    } catch (e) {
+        // fall through
+    }
+    return `${siteUrl(env)}/account.html`;
+};
+
+const handleLogin = async (request, env, url) => {
+    if (!env.GITHUB_CLIENT_ID || !env.GITHUB_CLIENT_SECRET) {
+        return new Response('Accounts are not switched on yet.', {status: 503});
+    }
+    const back = safeReturn(url.searchParams.get('return') || '', env);
+    const payload = `${Date.now()}|${back}`;
+    const state = `${btoa(payload).replace(/=+$/, '')}.${await hmac(env.GITHUB_CLIENT_SECRET, payload)}`;
+    const target = new URL('https://github.com/login/oauth/authorize');
+    target.searchParams.set('client_id', env.GITHUB_CLIENT_ID);
+    target.searchParams.set('redirect_uri', `${url.origin}/auth/callback`);
+    target.searchParams.set('state', state);
+    target.searchParams.set('allow_signup', 'true');
+    return Response.redirect(target.href, 302);
+};
+
+const handleCallback = async (request, env, url) => {
+    const fail = (back, why) => Response.redirect(`${back}#signin-error=${encodeURIComponent(why)}`, 302);
+    const [encoded, sig] = (url.searchParams.get('state') || '').split('.');
+    let payload = '';
+    try {
+        payload = atob(encoded || '');
+    } catch (e) {
+        payload = '';
+    }
+    const [time, back] = [payload.slice(0, payload.indexOf('|')), payload.slice(payload.indexOf('|') + 1)];
+    const home = `${siteUrl(env)}/account.html`;
+    if (!payload || !sig || !sameSecret(sig, await hmac(env.GITHUB_CLIENT_SECRET || '', payload))) return fail(home, 'Sign-in link is broken. Try again.');
+    const goBack = safeReturn(back, env);
+    if (Date.now() - parseInt(time, 10) > 15 * 60 * 1000) return fail(goBack, 'Sign-in took too long. Try again.');
+    const code = url.searchParams.get('code');
+    if (!code) return fail(goBack, 'Sign-in was cancelled.');
+
+    const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+        method: 'POST',
+        headers: {'content-type': 'application/json', 'accept': 'application/json'},
+        body: JSON.stringify({client_id: env.GITHUB_CLIENT_ID, client_secret: env.GITHUB_CLIENT_SECRET, code,
+            redirect_uri: `${url.origin}/auth/callback`})
+    });
+    const tokenBody = await tokenResponse.json().catch(() => ({}));
+    if (!tokenBody.access_token) return fail(goBack, 'GitHub did not sign you in. Try again.');
+    const ghResponse = await fetch('https://api.github.com/user', {
+        headers: {'authorization': `Bearer ${tokenBody.access_token}`, 'accept': 'application/vnd.github+json', 'user-agent': 'stick-hubs'}
+    });
+    const gh = await ghResponse.json().catch(() => ({}));
+    if (!gh.id || !gh.login) return fail(goBack, 'Could not read your GitHub account.');
+
+    const id = String(gh.id);
+    let user = null;
+    try {
+        user = JSON.parse(await env.DUO_KV.get(`user:${id}`) || 'null');
+    } catch (e) {
+        user = null;
+    }
+    const now = new Date().toISOString();
+    if (!user) {
+        user = {id, login: gh.login, displayName: cleanText(gh.login, 30), bio: '', accent: ACCENTS[0], bannerPreset: 'sky',
+            favorite: '', created: now};
+    }
+    if (user.login !== gh.login) {
+        await env.DUO_KV.delete(`login:${user.login.toLowerCase()}`).catch(() => null);
+        user.login = gh.login;
+    }
+    user.githubAvatar = typeof gh.avatar_url === 'string' ? gh.avatar_url : null;
+    user.lastSeen = now;
+    const token = randomId(40);
+    await Promise.all([
+        env.DUO_KV.put(`user:${id}`, JSON.stringify(user)),
+        env.DUO_KV.put(`login:${gh.login.toLowerCase()}`, id),
+        env.DUO_KV.put(`sess:${await sha256(token)}`, id, {expirationTtl: SESSION_DAYS * 24 * 60 * 60})
+    ]);
+    return Response.redirect(`${goBack}#session=${token}`, 302);
+};
+
+const handleLogout = async (request, env, cors) => {
+    const m = /^Bearer ([a-z0-9]{20,80})$/i.exec(request.headers.get('authorization') || '');
+    if (m) await env.DUO_KV.delete(`sess:${await sha256(m[1])}`);
+    return json(200, {ok: true}, cors);
+};
+
+const handleMe = async (request, env, cors, base) => {
+    const user = await sessionUser(request, env);
+    if (!user) return json(401, {error: 'Please sign in again.'}, cors);
+    if (request.method === 'GET') return json(200, {profile: publicProfile(user, base), id: user.id}, cors);
+    let body;
+    try {
+        body = await request.json();
+    } catch (e) {
+        return json(400, {error: 'Bad request'}, cors);
+    }
+    const next = {...user};
+    if ('displayName' in body) next.displayName = cleanText(body.displayName, 30) || user.login;
+    if ('bio' in body) next.bio = String(body.bio || '').replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, '').slice(0, 300).trim();
+    if ('accent' in body && ACCENTS.includes(body.accent)) next.accent = body.accent;
+    if ('bannerPreset' in body && BANNERS.includes(body.bannerPreset)) next.bannerPreset = body.bannerPreset;
+    if ('favorite' in body && FAVORITES.includes(body.favorite)) next.favorite = body.favorite;
+    if (hasBlockedWord(`${next.displayName} ${next.bio}`)) {
+        return json(400, {error: 'Your name or bio has a word that isn\'t allowed on Stick Hubs. Please change it.'}, cors);
+    }
+    next.updated = new Date().toISOString();
+    await env.DUO_KV.put(`user:${user.id}`, JSON.stringify(next));
+    return json(200, {profile: publicProfile(next, base)}, cors);
+};
+
+const isImage = (bytes, type) => {
+    if (type === 'image/png') return bytes[0] === 0x89 && bytes[1] === 0x50;
+    if (type === 'image/jpeg') return bytes[0] === 0xff && bytes[1] === 0xd8;
+    if (type === 'image/webp') return bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
+    return false;
+};
+
+const handleMeImage = async (request, env, cors, base, kind) => {
+    const user = await sessionUser(request, env);
+    if (!user) return json(401, {error: 'Please sign in again.'}, cors);
+    const type = (request.headers.get('content-type') || '').split(';')[0].trim();
+    const bytes = new Uint8Array(await request.arrayBuffer());
+    const next = {...user};
+    if (bytes.length === 0) {
+        // an empty upload removes the picture
+        await env.DUO_KV.delete(`img:${kind}:${user.id}`);
+        delete next[`${kind}Version`];
+        delete next[`${kind}Type`];
+    } else {
+        const max = kind === 'avatar' ? MAX_AVATAR : MAX_BANNER;
+        if (bytes.length > max || !isImage(bytes, type)) {
+            return json(400, {error: `Pictures must be PNG, JPEG or WebP, under ${Math.round(max / 1024)} KB.`}, cors);
+        }
+        await env.DUO_KV.put(`img:${kind}:${user.id}`, bytes);
+        next[`${kind}Version`] = Date.now().toString(36);
+        next[`${kind}Type`] = type;
+    }
+    await env.DUO_KV.put(`user:${user.id}`, JSON.stringify(next));
+    return json(200, {profile: publicProfile(next, base)}, cors);
+};
+
+const userByLogin = async (env, login) => {
+    const id = await env.DUO_KV.get(`login:${String(login).toLowerCase()}`);
+    if (!id) return null;
+    try {
+        return JSON.parse(await env.DUO_KV.get(`user:${id}`) || 'null');
+    } catch (e) {
+        return null;
+    }
+};
+
+const handleProfile = async (env, cors, base, login) => {
+    const user = await userByLogin(env, login);
+    if (!user) return json(404, {error: 'There is no Stick Hubs account with that name.'}, cors);
+    const projects = (await readIndex(env)).filter(p => p.ownerId === user.id && !p.hidden).map(publicInfo);
+    return json(200, {profile: publicProfile(user, base), projects}, {...cors, 'cache-control': 'public, max-age=20'});
+};
+
+const handleImage = async (env, cors, kind, id) => {
+    let user = null;
+    try {
+        user = JSON.parse(await env.DUO_KV.get(`user:${id}`) || 'null');
+    } catch (e) {
+        user = null;
+    }
+    const data = user && await env.DUO_KV.get(`img:${kind}:${id}`, 'arrayBuffer');
+    if (!data) return json(404, {error: 'Not found'}, cors);
+    return new Response(data, {headers: {...cors, 'content-type': user[`${kind}Type`] || 'image/png',
+        'cache-control': 'public, max-age=86400'}});
+};
+
+// Reports: after 3 different people report a profile, its pictures and bio are removed.
+// The owner (OWNER_PASS) resets a profile straight away.
+const handleProfileReport = async (request, env, cors) => {
+    let body;
+    try {
+        body = await request.json();
+    } catch (e) {
+        return json(400, {error: 'Bad request'}, cors);
+    }
+    const user = await userByLogin(env, cleanText(body.login, 60));
+    if (!user) return json(404, {error: 'Not found'}, cors);
+    const owner = isOwner(request, env);
+    if (!owner) {
+        const seenKey = `urep:${user.id}:${clientIp(request)}`;
+        if (await env.DUO_KV.get(seenKey)) return json(200, {ok: true}, cors);
+        await env.DUO_KV.put(seenKey, '1', {expirationTtl: 60 * 60 * 24 * 60});
+        user.reports = (user.reports || 0) + 1;
+    }
+    if (owner || user.reports >= HIDE_AFTER_REPORTS) {
+        await Promise.all([env.DUO_KV.delete(`img:avatar:${user.id}`), env.DUO_KV.delete(`img:banner:${user.id}`)]);
+        ['avatarVersion', 'avatarType', 'bannerVersion', 'bannerType'].forEach(k => delete user[k]);
+        user.bio = '';
+        user.displayName = user.login;
+        user.reports = 0;
+    }
+    await env.DUO_KV.put(`user:${user.id}`, JSON.stringify(user));
+    return json(200, {ok: true, reset: owner}, cors);
 };
 
 // ---------------------------------------------------------------- router
@@ -351,8 +621,19 @@ export default {
         const url = new URL(request.url);
         const path = url.pathname.replace(/\/+$/, '');
 
-        // Reading the Game Hub is open to everyone.
+        const base = url.origin;
+        // Signing in with GitHub (the browser goes here directly).
+        if (request.method === 'GET' && path === '/auth/login') return handleLogin(request, env, url);
+        if (request.method === 'GET' && path === '/auth/callback') return handleCallback(request, env, url);
+
+        // Reading the Game Hub and profiles is open to everyone.
         if (request.method === 'GET') {
+            if (path === '/auth/status') return json(200, {accounts: !!(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET)}, cors);
+            if (path === '/me') return handleMe(request, env, cors, base);
+            const u = /^\/u\/([A-Za-z0-9-]{1,39})$/.exec(path);
+            if (u) return handleProfile(env, cors, base, u[1]);
+            const im = /^\/img\/(avatar|banner)\/([0-9]{1,20})$/.exec(path);
+            if (im) return handleImage(env, cors, im[1], im[2]);
             if (path === '/hub/list') return handleList(env, cors);
             const m = /^\/hub\/(info|file|thumb)\/([a-z0-9]{4,20})$/.exec(path);
             if (m) return m[1] === 'info' ? handleInfo(env, cors, m[2]) : handleFile(env, cors, m[2], m[1]);
@@ -368,6 +649,11 @@ export default {
         if (path === '/hub/publish') return handlePublish(request, env, cors);
         if (path === '/hub/report') return handleReport(request, env, cors);
         if (path === '/hub/delete') return handleDelete(request, env, cors);
+        if (path === '/auth/logout') return handleLogout(request, env, cors);
+        if (path === '/me') return handleMe(request, env, cors, base);
+        if (path === '/me/avatar') return handleMeImage(request, env, cors, base, 'avatar');
+        if (path === '/me/banner') return handleMeImage(request, env, cors, base, 'banner');
+        if (path === '/u/report') return handleProfileReport(request, env, cors);
         return json(404, {error: 'Not found'}, cors);
     }
 };
