@@ -1984,16 +1984,16 @@ index 0000000..3332f3f
 +}
 diff --git a/src/components/sl-duo/duo-panel.jsx b/src/components/sl-duo/duo-panel.jsx
 new file mode 100644
-index 0000000..5663b01
+index 0000000..5aa53bd
 --- /dev/null
 +++ b/src/components/sl-duo/duo-panel.jsx
-@@ -0,0 +1,581 @@
+@@ -0,0 +1,586 @@
 +import React from 'react';
 +import PropTypes from 'prop-types';
 +import {connect} from 'react-redux';
 +import classNames from 'classnames';
 +import {isDuoOpen, setDuoOpen, onDuoChange} from './duo-store';
-+import {loadSettings, saveSettings, loadConfig, sendToDuo} from '../../lib/sl-duo/duo-client';
++import {loadSettings, saveSettings, loadConfig, duoServerOn, sendToDuo} from '../../lib/sl-duo/duo-client';
 +import {getWorkspace} from '../../lib/sl-workspace-registry';
 +import {workspaceToText} from '../../lib/sl-text-code/printer';
 +import {applyText, commandList} from '../../lib/sl-text-code/apply';
@@ -2149,7 +2149,12 @@ index 0000000..5663b01
 +            this.setState({open});
 +            if (open) setTimeout(() => this.inputRef.current && this.inputRef.current.focus(), 50);
 +        });
-+        loadConfig().then(c => this.setState({serverReady: !!c.serverUrl}));
++        loadConfig().then(c => {
++            const serverReady = duoServerOn(c);
++            this.setState({serverReady});
++            // no Duo server: use the person's own key
++            if (!serverReady && this.state.settings.mode === 'server') this.updateSetting('mode', 'key');
++        });
 +    }
 +    componentDidUpdate (prevProps, prevState) {
 +        if (prevState.messages !== this.state.messages && this.listRef.current) {
@@ -6140,10 +6145,10 @@ index 0000000..b3681f7
 +export default install;
 diff --git a/src/lib/sl-duo/duo-client.js b/src/lib/sl-duo/duo-client.js
 new file mode 100644
-index 0000000..a712943
+index 0000000..0666a83
 --- /dev/null
 +++ b/src/lib/sl-duo/duo-client.js
-@@ -0,0 +1,127 @@
+@@ -0,0 +1,131 @@
 +// Stick Lab Duo: talks to Claude Opus 5.5, through the Stick Hubs Duo server or the user's own API key.
 +
 +const MODEL = 'claude-opus-5-5';
@@ -6174,6 +6179,9 @@ index 0000000..a712943
 +    }
 +    return configPromise;
 +};
++
++// The Stick Hubs server can run the Game Hub without Duo ("duo": false in duo-config.json).
++const duoServerOn = config => !!(config && config.serverUrl) && config.duo !== false;
 +
 +/**
 + * Read a Claude streaming response and call onText with each new piece of text.
@@ -6244,8 +6252,8 @@ index 0000000..a712943
 +        return {text: await readStream(response, onText), remaining: null};
 +    }
 +    const config = await loadConfig();
-+    if (!config.serverUrl) {
-+        throw new Error('The Stick Hubs Duo server isn\'t switched on yet. You can add your own Anthropic API key in Duo settings.');
++    if (!duoServerOn(config)) {
++        throw new Error('Duo uses your own Anthropic API key. Click the gear above, choose \"My own Anthropic API key\" and paste your key.');
 +    }
 +    const headers = {'content-type': 'application/json'};
 +    if (settings.ownerPass) headers['x-duo-owner'] = settings.ownerPass;
@@ -6269,6 +6277,7 @@ index 0000000..a712943
 +    loadSettings,
 +    saveSettings,
 +    loadConfig,
++    duoServerOn,
 +    sendToDuo
 +};
 diff --git a/src/lib/sl-duo/game-builder.js b/src/lib/sl-duo/game-builder.js
@@ -8366,13 +8375,60 @@ index 2951caf..11d78a2 100644
  
 diff --git a/static/duo-config.json b/static/duo-config.json
 new file mode 100644
-index 0000000..2983eb4
+index 0000000..e6c3abe
 --- /dev/null
 +++ b/static/duo-config.json
-@@ -0,0 +1,3 @@
+@@ -0,0 +1,4 @@
 +{
-+  "serverUrl": ""
++  "serverUrl": "",
++  "duo": false
 +}
+diff --git a/static/favicon.ico b/static/favicon.ico
+index c837a3a..238e107 100644
+Binary files a/static/favicon.ico and b/static/favicon.ico differ
+diff --git a/static/images/192.png b/static/images/192.png
+index c1c9305..2b79fd2 100644
+Binary files a/static/images/192.png and b/static/images/192.png differ
+diff --git a/static/images/512.png b/static/images/512.png
+index 977ac9a..3a07d25 100644
+Binary files a/static/images/512.png and b/static/images/512.png differ
+diff --git a/static/images/apple-touch-icon.png b/static/images/apple-touch-icon.png
+index 05b61d8..f206043 100644
+Binary files a/static/images/apple-touch-icon.png and b/static/images/apple-touch-icon.png differ
+diff --git a/static/manifest.webmanifest b/static/manifest.webmanifest
+index 6f681bd..a569535 100644
+--- a/static/manifest.webmanifest
++++ b/static/manifest.webmanifest
+@@ -1,21 +1,13 @@
+ {
+-  "short_name": "TurboWarp",
+-  "name": "TurboWarp",
+-  "description": "Mod of Scratch 3 with a compiler, dark mode, and more features.",
++  "short_name": "Stick Lab",
++  "name": "Stick Lab",
++  "description": "Make games with blocks. By Stick Hubs, based on TurboWarp.",
+   "icons": [
+-    {
+-      "src": "images/192.png",
+-      "type": "image/png",
+-      "sizes": "192x192"
+-    },
+-    {
+-      "src": "images/512.png",
+-      "type": "image/png",
+-      "sizes": "512x512"
+-    }
++    {"src": "images/192.png", "type": "image/png", "sizes": "192x192"},
++    {"src": "images/512.png", "type": "image/png", "sizes": "512x512"}
+   ],
+-  "start_url": "editor",
+-  "background_color": "#333333",
++  "start_url": "./",
++  "background_color": "#e5f0ff",
+   "display": "standalone",
+-  "theme_color": "#333333"
++  "theme_color": "#2a6ab8"
+ }
 diff --git a/webpack.config.js b/webpack.config.js
 index f9df336..9324893 100644
 --- a/webpack.config.js

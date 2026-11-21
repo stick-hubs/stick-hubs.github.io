@@ -1,5 +1,8 @@
 # Stick Hubs server (Stick Lab Duo + Game Hub)
 
+**Only want the Game Hub (free)?** Skip the ANTHROPIC_API_KEY secret. Publishing works without it, and Duo then uses
+each person's own Anthropic API key (set in Duo's settings). Keep `"duo": false` in `lab/duo-config.json`.
+
 This one Cloudflare Worker runs two things: Stick Lab Duo and the Game Hub, where people publish their Stick Lab projects.
 
 Stick Lab Duo talks to Claude Opus 5.5 through this small Cloudflare Worker, so your Anthropic
