@@ -1,33 +1,37 @@
 {
  "windows": {
   "name": "Stick_Lab-windows.exe",
-  "size": 114364585,
-  "sha256": "41aa15ae5e6450d66d7505daa7fa9c33c06b98e1d8c4ee495ca13beeb598c1ae",
+  "size": 114397901,
+  "sha256": "5191bc9e7784c19150f586f7bc8851ae4c00c2704845ad7e3eb883a53b5e21f2",
   "parts": [
    "Stick_Lab-windows.exe.part1",
    "Stick_Lab-windows.exe.part2",
    "Stick_Lab-windows.exe.part3"
-  ]
+  ],
+  "version": "1.5.1"
  },
  "mac-arm64": {
   "name": "Stick_Lab-mac-arm64.zip",
-  "size": 137793172,
-  "sha256": "9d812283ce06d43906dbeb9e22176224f9f6f4ea17874298f723bed3ac1e8b00",
+  "size": 141872469,
+  "sha256": "a23a8f9cfdad3f03878b62137fae55044f3ffecdd95490aa67e1e62fea2e95c2",
   "parts": [
    "Stick_Lab-mac-arm64.zip.part1",
    "Stick_Lab-mac-arm64.zip.part2",
-   "Stick_Lab-mac-arm64.zip.part3"
-  ]
+   "Stick_Lab-mac-arm64.zip.part3",
+   "Stick_Lab-mac-arm64.zip.part4"
+  ],
+  "version": "1.5.1"
  },
  "mac-x64": {
   "name": "Stick_Lab-mac-x64.zip",
-  "size": 141843865,
-  "sha256": "b2186697e4adf3883f63b8116f0a5d681eab6d21011a47bb426e701957a00603",
+  "size": 145923162,
+  "sha256": "17d4dbabac869d733bfedb9200ed7bddf89c32e0ff23236899e44940e38a7e5b",
   "parts": [
    "Stick_Lab-mac-x64.zip.part1",
    "Stick_Lab-mac-x64.zip.part2",
    "Stick_Lab-mac-x64.zip.part3",
    "Stick_Lab-mac-x64.zip.part4"
-  ]
+  ],
+  "version": "1.5.1"
  }
 }

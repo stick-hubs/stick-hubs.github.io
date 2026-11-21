@@ -404,20 +404,22 @@ index 444e77c..854e772 100644
 +    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
 +}
 diff --git a/src/components/menu-bar/menu-bar.jsx b/src/components/menu-bar/menu-bar.jsx
-index 6caddb5..644747c 100644
+index 6caddb5..52ae06d 100644
 --- a/src/components/menu-bar/menu-bar.jsx
 +++ b/src/components/menu-bar/menu-bar.jsx
-@@ -96,6 +96,9 @@ import editIcon from './icon--edit.svg';
+@@ -96,6 +96,11 @@ import editIcon from './icon--edit.svg';
  import addonsIcon from './addons.svg';
  import errorIcon from './tw-error.svg';
  import advancedIcon from './tw-advanced.svg';
 +import stickLabLogo from './sl-logo.svg';
 +import {toggleDuo} from '../sl-duo/duo-store';
 +import {setPublishOpen} from '../sl-publish/publish-store';
++import UpdateButton from '../sl-update/update-button.jsx';
++import {STICK_LAB_VERSION} from '../sl-update/version';
  
  import ninetiesLogo from './nineties_logo.svg';
  import catLogo from './cat_logo.svg';
-@@ -492,6 +495,49 @@ class MenuBar extends React.Component {
+@@ -492,6 +497,52 @@ class MenuBar extends React.Component {
              >
                  <div className={styles.mainMenu}>
                      <div className={styles.fileGroup}>
@@ -434,7 +436,7 @@ index 6caddb5..644747c 100644
 +                                draggable={false}
 +                                src={stickLabLogo}
 +                            />
-+                            <span className={styles.stickLabName}>{'Stick Lab'}<span className={styles.stickLabVersion}>{' 1.5'}</span></span>
++                            <span className={styles.stickLabName}>{'Stick Lab'}<span className={styles.stickLabVersion}>{` ${STICK_LAB_VERSION}`}</span></span>
 +                        </a>
 +                        <button
 +                            className={classNames(styles.menuBarItem, styles.hoverable, styles.duoButton)}
@@ -464,10 +466,13 @@ index 6caddb5..644747c 100644
 +                            /></svg>
 +                            <span>{'Publish'}</span>
 +                        </button>
++                        <UpdateButton
++                            className={classNames(styles.menuBarItem, styles.hoverable, styles.duoButton)}
++                        />
                          {this.props.errors.length > 0 && <div>
                              <MenuLabel
                                  open={this.props.errorsMenuOpen}
-@@ -1015,7 +1061,7 @@ class MenuBar extends React.Component {
+@@ -1015,7 +1066,7 @@ class MenuBar extends React.Component {
                      <div className={styles.menuBarItem}>
                          <a
                              className={styles.feedbackLink}
@@ -6209,6 +6214,218 @@ index 0000000..b28bce4
 +    border-top-color: #8e1b1b;
 +    font-weight: bold;
 +}
+diff --git a/src/components/sl-update/update-button.jsx b/src/components/sl-update/update-button.jsx
+new file mode 100644
+index 0000000..50e5e81
+--- /dev/null
++++ b/src/components/sl-update/update-button.jsx
+@@ -0,0 +1,156 @@
++// Stick Lab 1.5.1: the Update button in the menu bar.
++// The app checks the Stick Hubs site for a newer version; the website version just reloads to get the newest files.
++import React from 'react';
++import PropTypes from 'prop-types';
++import classNames from 'classnames';
++import styles from './update.css';
++import {STICK_LAB_VERSION, LATEST_URL, SITE, isDesktopApp, compareVersions} from './version';
++
++const fetchLatest = () => fetch(`${LATEST_URL}?t=${Date.now()}`, {cache: 'no-store'})
++    .then(r => {
++        if (!r.ok) throw new Error(`HTTP ${r.status}`);
++        return r.json();
++    });
++
++const downloadPage = () => {
++    const ua = navigator.userAgent || '';
++    if (/Windows/i.test(ua)) return `${SITE}download.html?file=windows`;
++    return `${SITE}stick-lab.html#get`;
++};
++
++class UpdateButton extends React.Component {
++    constructor (props) {
++        super(props);
++        this.state = {open: false, checking: false, latest: null, error: null};
++        this.handleClick = this.handleClick.bind(this);
++        this.handleClose = () => this.setState({open: false});
++        this.handleDownload = this.handleDownload.bind(this);
++        this.handleReload = () => location.reload();
++        this.handleOutside = this.handleOutside.bind(this);
++        this.ref = React.createRef();
++    }
++    componentDidMount () {
++        // quietly check once, so a green dot can show when an update is ready
++        this.check(true);
++        document.addEventListener('mousedown', this.handleOutside);
++    }
++    componentWillUnmount () {
++        document.removeEventListener('mousedown', this.handleOutside);
++    }
++    handleOutside (e) {
++        if (this.state.open && this.ref.current && !this.ref.current.contains(e.target)) this.setState({open: false});
++    }
++    check (quiet) {
++        if (!quiet) this.setState({checking: true, error: null, open: true});
++        return fetchLatest()
++            .then(latest => this.setState({latest, checking: false}))
++            .catch(err => this.setState({checking: false, error: quiet ? null : err.message}));
++    }
++    handleClick () {
++        if (this.state.open) {
++            this.setState({open: false});
++            return;
++        }
++        this.check(false);
++    }
++    handleDownload () {
++        if (this.props.onBeforeLeave) this.props.onBeforeLeave();
++        window.open(downloadPage(), '_blank');
++        this.setState({open: false});
++    }
++    renderPop () {
++        const {checking, latest, error} = this.state;
++        const app = isDesktopApp();
++        if (checking) return <div>{'Checking for updates...'}</div>;
++        if (error || !latest) {
++            return (
++                <div>
++                    {"Couldn't check for updates. Are you online?"}
++                    <div className={styles.row}>
++                        <button
++                            className={classNames(styles.btn, styles.plain)}
++                            onClick={this.handleClose}
++                        >{'OK'}</button>
++                    </div>
++                </div>
++            );
++        }
++        const newer = compareVersions(latest.version, STICK_LAB_VERSION) > 0;
++        if (!newer) {
++            return (
++                <div>
++                    <b>{"You're up to date!"}</b>
++                    <div className={styles.notes}>{`Stick Lab ${STICK_LAB_VERSION} is the newest version.`}</div>
++                    <div className={styles.row}>
++                        <button
++                            className={classNames(styles.btn, styles.plain)}
++                            onClick={this.handleClose}
++                        >{'OK'}</button>
++                    </div>
++                </div>
++            );
++        }
++        return (
++            <div>
++                <b>{`Stick Lab ${latest.version} is out!`}</b>
++                {` You have ${STICK_LAB_VERSION}.`}
++                {latest.notes ? <div className={styles.notes}>{latest.notes}</div> : null}
++                {app ? (
++                    <div className={styles.notes}>{'Save your project first. Then download the new version and open it instead of this one.'}</div>
++                ) : (
++                    <div className={styles.notes}>{'Save your project first, then reload to get the new version.'}</div>
++                )}
++                <div className={styles.row}>
++                    <button
++                        className={classNames(styles.btn, styles.plain)}
++                        onClick={this.handleClose}
++                    >{'Later'}</button>
++                    <button
++                        className={styles.btn}
++                        onClick={app ? this.handleDownload : this.handleReload}
++                    >{app ? 'Download update' : 'Reload now'}</button>
++                </div>
++            </div>
++        );
++    }
++    render () {
++        const {latest, open} = this.state;
++        const ready = latest && compareVersions(latest.version, STICK_LAB_VERSION) > 0;
++        return (
++            <div
++                className={styles.wrap}
++                ref={this.ref}
++            >
++                <button
++                    className={this.props.className}
++                    title={ready ? `Stick Lab ${latest.version} is ready to download` : 'Check for Stick Lab updates'}
++                    onClick={this.handleClick}
++                >
++                    <svg
++                        aria-hidden="true"
++                        height="14"
++                        viewBox="0 0 24 24"
++                        width="14"
++                    ><path
++                        d="M20 12 A8 8 0 1 1 17.7 6.3 M20 3 V8 H15"
++                        fill="none"
++                        stroke="currentColor"
++                        strokeLinecap="round"
++                        strokeLinejoin="round"
++                        strokeWidth="2.6"
++                    /></svg>
++                    <span>{'Update'}</span>
++                    {ready ? <span className={styles.dot} /> : null}
++                </button>
++                {open ? <div className={styles.pop}>{this.renderPop()}</div> : null}
++            </div>
++        );
++    }
++}
++
++UpdateButton.propTypes = {
++    className: PropTypes.string,
++    onBeforeLeave: PropTypes.func
++};
++
++export default UpdateButton;
+diff --git a/src/components/sl-update/update.css b/src/components/sl-update/update.css
+new file mode 100644
+index 0000000..180fcba
+--- /dev/null
++++ b/src/components/sl-update/update.css
+@@ -0,0 +1,21 @@
++.wrap { position: relative; display: flex; align-items: center; height: 100%; }
++.dot {
++    width: 8px; height: 8px; border-radius: 50%; margin-left: 4px;
++    background: radial-gradient(circle at 35% 35%, #c9ffb5, #3fbf2f 60%, #2a8a1f);
++    box-shadow: 0 0 6px #7dff6a;
++}
++.pop {
++    position: absolute; top: calc(100% + 6px); left: 0; z-index: 1000; width: 270px;
++    background: linear-gradient(180deg, #ffffff, #e9f1fb); color: #1f3550;
++    border: 1px solid #7f9db9; border-radius: 6px; box-shadow: 0 6px 20px rgba(20, 50, 90, 0.3);
++    font: 12px Verdana, Tahoma, "Segoe UI", sans-serif; padding: 10px 12px; line-height: 1.45;
++}
++.pop b { color: #12407a; }
++.notes { margin: 6px 0 0; color: #3b5578; }
++.row { display: flex; gap: 6px; margin-top: 10px; justify-content: flex-end; }
++.btn {
++    border: 1px solid #1b4f8f; border-radius: 3px; padding: 4px 10px; cursor: pointer;
++    font: bold 11px Verdana, Tahoma, sans-serif; color: #fff;
++    background: linear-gradient(180deg, #7cc0f5 0%, #3e8fdc 48%, #2167b8 52%, #2f7fd0 100%);
++}
++.plain { color: #1f3550; border-color: #9db4cf; background: linear-gradient(180deg, #ffffff, #dde7f3); }
+diff --git a/src/components/sl-update/version.js b/src/components/sl-update/version.js
+new file mode 100644
+index 0000000..3a3f94d
+--- /dev/null
++++ b/src/components/sl-update/version.js
+@@ -0,0 +1,17 @@
++// The Stick Lab version. Bump this (and downloads/latest.json on the site) for every release.
++export const STICK_LAB_VERSION = '1.5.1';
++export const LATEST_URL = 'https://stick-hubs.github.io/downloads/latest.json';
++export const SITE = 'https://stick-hubs.github.io/';
++
++export const isDesktopApp = () => typeof location !== 'undefined' && location.host === 'app.stick-lab.local';
++
++/** -1, 0 or 1, comparing "1.5.1"-style versions */
++export const compareVersions = (a, b) => {
++    const pa = String(a).split('.').map(n => parseInt(n, 10) || 0);
++    const pb = String(b).split('.').map(n => parseInt(n, 10) || 0);
++    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
++        const d = (pa[i] || 0) - (pb[i] || 0);
++        if (d) return d > 0 ? 1 : -1;
++    }
++    return 0;
++};
 diff --git a/src/containers/blocks.jsx b/src/containers/blocks.jsx
 index 1a93708..b47af97 100644
 --- a/src/containers/blocks.jsx

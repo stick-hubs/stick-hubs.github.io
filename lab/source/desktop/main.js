@@ -1,5 +1,5 @@
 // Stick Lab desktop app
-const {app, BrowserWindow, protocol, net, shell, Menu} = require('electron');
+const {app, BrowserWindow, protocol, net, shell, Menu, dialog} = require('electron');
 const path = require('path');
 const fs = require('fs');
 const {pathToFileURL} = require('url');
@@ -47,6 +47,21 @@ const createWindow = filePath => {
         }
     });
     win.once('ready-to-show', () => win.show());
+    // The editor asks "leave this page?" when a project has unsaved changes. A web browser shows
+    // that question by itself, but in an app it has to be shown here, or the close button does nothing.
+    win.webContents.on('will-prevent-unload', event => {
+        const choice = dialog.showMessageBoxSync(win, {
+            type: 'question',
+            buttons: ['Close without saving', 'Cancel'],
+            defaultId: 1,
+            cancelId: 1,
+            noLink: true,
+            title: 'Stick Lab',
+            message: 'Close Stick Lab?',
+            detail: 'Your project has changes that are not saved. To keep them, click Cancel, then File > Save to your computer.'
+        });
+        if (choice === 0) event.preventDefault(); // preventDefault here means "let it close"
+    });
     // Links (Stick Hubs site, forum, help) open in the normal web browser
     win.webContents.setWindowOpenHandler(({url}) => {
         if (url.startsWith(APP_ORIGIN)) {
