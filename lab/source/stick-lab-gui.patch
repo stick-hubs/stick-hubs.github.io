@@ -280,14 +280,15 @@ index ad44099..bda246b 100644
      border: 1px solid $looks-secondary;
      box-sizing: content-box; /* To match scratch-block vertical toolbox borders */
 diff --git a/src/components/gui/gui.jsx b/src/components/gui/gui.jsx
-index 30f8336..fe402d6 100644
+index 30f8336..2821010 100644
 --- a/src/components/gui/gui.jsx
 +++ b/src/components/gui/gui.jsx
-@@ -44,6 +44,11 @@ import {Theme} from '../../lib/themes';
+@@ -44,6 +44,12 @@ import {Theme} from '../../lib/themes';
  
  import {isRendererSupported, isBrowserSupported} from '../../lib/tw-environment-support-prober';
  
 +import '../../lib/sl-classic-ui.js';
++import '../../lib/sl-msn-style.js';
 +import CodeModeToggle from '../sl-text-code/code-mode-toggle.jsx';
 +import TextCodeEditor from '../sl-text-code/text-code-editor.jsx';
 +import DuoPanel from '../sl-duo/duo-panel.jsx';
@@ -295,7 +296,7 @@ index 30f8336..fe402d6 100644
  import styles from './gui.css';
  import addExtensionIcon from './icon--extensions.svg';
  import codeIcon from '!../../lib/tw-recolor/build!./icon--code.svg';
-@@ -343,9 +348,9 @@ const GUIComponent = props => {
+@@ -343,9 +349,9 @@ const GUIComponent = props => {
                                              src={codeIcon()}
                                          />
                                          <FormattedMessage
@@ -308,7 +309,7 @@ index 30f8336..fe402d6 100644
                                          />
                                      </Tab>
                                      <Tab
-@@ -400,19 +405,10 @@ const GUIComponent = props => {
+@@ -400,19 +406,10 @@ const GUIComponent = props => {
                                              theme={theme}
                                              vm={vm}
                                          />
@@ -330,7 +331,7 @@ index 30f8336..fe402d6 100644
                                      </Box>
                                      <Box className={styles.watermark}>
                                          <Watermark />
-@@ -449,6 +445,8 @@ const GUIComponent = props => {
+@@ -449,6 +446,8 @@ const GUIComponent = props => {
                          </Box>
                      </Box>
                  </Box>
@@ -6956,6 +6957,208 @@ index 0000000..9838674
 +    playUrl,
 +    publishProject
 +};
+diff --git a/src/lib/sl-msn-style.js b/src/lib/sl-msn-style.js
+new file mode 100644
+index 0000000..44cde6f
+--- /dev/null
++++ b/src/lib/sl-msn-style.js
+@@ -0,0 +1,196 @@
++// Stick Lab: glossy, 3D "messenger chat" look for say/think bubbles and variable/list monitors.
++import TextBubbleSkin from 'scratch-render/src/TextBubbleSkin';
++
++const SHADOW = 6; // room for the drop shadow on the right and bottom
++const FONT = '"Segoe UI", Tahoma, Verdana, Helvetica';
++
++// ---------------------------------------------------------------- speech and thought bubbles
++
++const proto = TextBubbleSkin.prototype;
++const originalReflow = proto._reflowLines;
++
++proto._reflowLines = function () {
++    if (!this._slStyled) {
++        this._slStyled = true;
++        this._style = Object.assign({}, this._style, {
++            font: FONT,
++            fontSize: 14,
++            lineHeight: 17,
++            padding: 10,
++            cornerRadius: 11,
++            strokeWidth: 2,
++            tailHeight: 13,
++            textFill: '#14365f'
++        });
++        this.measurementProvider.clearCache();
++        this._restyleCanvas();
++    }
++    originalReflow.call(this);
++    this._size[0] += SHADOW;
++    this._size[1] += SHADOW;
++};
++
++const roundRect = (ctx, x, y, w, h, r) => {
++    ctx.moveTo(x + r, y);
++    ctx.arcTo(x + w, y, x + w, y + h, r);
++    ctx.arcTo(x + w, y + h, x, y + h, r);
++    ctx.arcTo(x, y + h, x, y, r);
++    ctx.arcTo(x, y, x + w, y, r);
++    ctx.closePath();
++};
++
++proto._renderTextBubble = function (scale) {
++    const ctx = this._canvas.getContext('2d');
++    if (this._textDirty) this._reflowLines();
++    const s = this._style;
++    const w = this._textAreaSize.width;
++    const h = this._textAreaSize.height;
++
++    this._canvas.width = Math.ceil(this._size[0] * scale);
++    this._canvas.height = Math.ceil(this._size[1] * scale);
++    this._restyleCanvas();
++    ctx.setTransform(1, 0, 0, 1, 0, 0);
++    ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
++    ctx.scale(scale, scale);
++    ctx.translate(s.strokeWidth * 0.5, s.strokeWidth * 0.5);
++
++    ctx.save();
++    if (this._pointsLeft) {
++        ctx.scale(-1, 1);
++        ctx.translate(-w, 0);
++    }
++    const r = s.cornerRadius;
++    // the bubble's outline: rounded box plus its tail
++    const shape = () => {
++        ctx.beginPath();
++        roundRect(ctx, 0, 0, w, h, r);
++        if (this._bubbleType === 'say') {
++            const tx = w - r - 4;
++            ctx.moveTo(tx - 16, h - 1);
++            ctx.quadraticCurveTo(tx - 4, h + 4, tx + 4, h + s.tailHeight);
++            ctx.quadraticCurveTo(tx + 1, h + 3, tx, h - 1);
++            ctx.closePath();
++        } else {
++            const tx = w - r - 10;
++            ctx.moveTo(tx + 5, h + 6);
++            ctx.arc(tx, h + 6, 5, 0, Math.PI * 2);
++            ctx.moveTo(tx + 10.5, h + 12.5);
++            ctx.arc(tx + 8, h + 12.5, 2.5, 0, Math.PI * 2);
++        }
++    };
++
++    // soft 3D shadow
++    ctx.save();
++    ctx.shadowColor = 'rgba(16, 52, 104, 0.38)';
++    ctx.shadowBlur = 5;
++    ctx.shadowOffsetX = this._pointsLeft ? -2 : 2;
++    ctx.shadowOffsetY = 2.5;
++    shape();
++    ctx.fillStyle = '#dbe9fa';
++    ctx.fill();
++    ctx.restore();
++
++    // glossy body: bright top, cool blue bottom
++    shape();
++    const body = ctx.createLinearGradient(0, 0, 0, h + s.tailHeight);
++    body.addColorStop(0, '#ffffff');
++    body.addColorStop(0.5, '#f1f7ff');
++    body.addColorStop(0.51, '#e2eefc');
++    body.addColorStop(1, '#c9def7');
++    ctx.fillStyle = body;
++    ctx.fill();
++    ctx.lineWidth = s.strokeWidth;
++    ctx.strokeStyle = '#6f9fd6';
++    ctx.stroke();
++
++    // shine on the top half
++    ctx.save();
++    ctx.beginPath();
++    roundRect(ctx, 2.5, 2.5, w - 5, (h * 0.48), Math.max(2, r - 3));
++    ctx.clip();
++    const shine = ctx.createLinearGradient(0, 0, 0, h * 0.5);
++    shine.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
++    shine.addColorStop(1, 'rgba(255, 255, 255, 0.25)');
++    ctx.fillStyle = shine;
++    ctx.fillRect(0, 0, w, h);
++    ctx.restore();
++
++    // thin white inner edge, like glass
++    ctx.beginPath();
++    roundRect(ctx, 2, 2, w - 4, h - 4, Math.max(2, r - 2));
++    ctx.lineWidth = 1;
++    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
++    ctx.stroke();
++    ctx.restore();
++
++    // the words, with a tiny white emboss
++    const lines = this._lines;
++    for (let i = 0; i < lines.length; i++) {
++        const y = s.padding + (s.lineHeight * i) + (s.fontHeightRatio * s.fontSize);
++        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
++        ctx.fillText(lines[i], s.padding, y + 1);
++        ctx.fillStyle = s.textFill;
++        ctx.fillText(lines[i], s.padding, y);
++    }
++    this._renderedScale = scale;
++};
++
++// ---------------------------------------------------------------- variable and list monitors
++
++const css = `
++[class*="monitor_monitor-container_"] {
++    border: 1px solid #6f9fd6 !important;
++    border-radius: 8px !important;
++    background: linear-gradient(180deg, #ffffff 0%, #f1f7ff 48%, #dfecfb 52%, #cfe2f8 100%) !important;
++    box-shadow: 0 2px 5px rgba(16, 52, 104, 0.35), inset 0 1px 0 #ffffff, inset 0 0 0 1px rgba(255, 255, 255, 0.6) !important;
++    font-family: ${FONT}, sans-serif !important;
++}
++[class*="monitor_default-monitor_"] { padding: 3px 4px !important; }
++[class*="monitor_label_"] {
++    color: #14365f !important;
++    text-shadow: 0 1px 0 #ffffff;
++    font-weight: bold !important;
++}
++[class*="monitor_value_"], [class*="monitor_large-value_"] {
++    color: #ffffff !important;
++    font-weight: bold;
++    border-radius: 10px !important;
++    border: 1px solid #1d5aa3 !important;
++    background: linear-gradient(180deg, #8cc4f5 0%, #4d98e2 48%, #2a73c9 52%, #3d8ad9 100%) !important;
++    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 1px 2px rgba(16, 52, 104, 0.4) !important;
++    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
++    padding: 1px 6px !important;
++}
++[class*="monitor_large-value_"] { border-radius: 8px !important; }
++[class*="monitor_list-header_"], [class*="monitor_list-footer_"] {
++    background: linear-gradient(180deg, #ffffff 0%, #eef5fe 48%, #dbe9fa 52%, #e6f0fc 100%) !important;
++    color: #14365f !important;
++    border-color: #9dbde3 !important;
++    text-shadow: 0 1px 0 #ffffff;
++}
++[class*="monitor_list-body_"] { background: #f4f8fe !important; }
++[class*="monitor_list-index_"] { color: #14365f !important; }
++[class*="monitor_list-value_"] {
++    color: #ffffff !important;
++    border: 1px solid #1d5aa3 !important;
++    border-radius: 6px !important;
++    background: linear-gradient(180deg, #8cc4f5 0%, #4d98e2 48%, #2a73c9 52%, #3d8ad9 100%) !important;
++    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6) !important;
++    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
++}
++[class*="monitor_list-value_"] input { color: #14365f; }
++[class*="monitor_slider_"] { accent-color: #2a73c9; }
++`;
++
++const install = () => {
++    if (typeof document === 'undefined' || document.getElementById('sl-msn-style')) return;
++    const style = document.createElement('style');
++    style.id = 'sl-msn-style';
++    style.textContent = css;
++    const add = () => document.head.appendChild(style);
++    if (document.head) add();
++    else document.addEventListener('DOMContentLoaded', add);
++};
++install();
++
++export default install;
 diff --git a/src/lib/sl-physics/blocks.js b/src/lib/sl-physics/blocks.js
 new file mode 100644
 index 0000000..f0d6789
