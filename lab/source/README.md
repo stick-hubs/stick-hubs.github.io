@@ -32,3 +32,6 @@ Stick Lab also still opens `.sb3`, `.sb2` and `.sb` files.
 The Script tab has a Blocks/Text switch. Text coding turns a sprite's scripts into text and back
 (`src/lib/sl-text-code/`). Unchanged scripts keep their blocks; scripts that can't be written as
 text are shown as `locked_script("id")` lines and are kept as they are.
+
+
+Stick Lab 1.4 also uses Matter.js 0.20.0 (MIT License, by Liam Brummitt) for the Physics blocks: `npm install matter-js@0.20.0`.
