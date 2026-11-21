@@ -404,7 +404,7 @@ index 444e77c..854e772 100644
 +    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
 +}
 diff --git a/src/components/menu-bar/menu-bar.jsx b/src/components/menu-bar/menu-bar.jsx
-index 6caddb5..55c1766 100644
+index 6caddb5..644747c 100644
 --- a/src/components/menu-bar/menu-bar.jsx
 +++ b/src/components/menu-bar/menu-bar.jsx
 @@ -96,6 +96,9 @@ import editIcon from './icon--edit.svg';
@@ -434,7 +434,7 @@ index 6caddb5..55c1766 100644
 +                                draggable={false}
 +                                src={stickLabLogo}
 +                            />
-+                            <span className={styles.stickLabName}>{'Stick Lab'}<span className={styles.stickLabVersion}>{' 1.4'}</span></span>
++                            <span className={styles.stickLabName}>{'Stick Lab'}<span className={styles.stickLabVersion}>{' 1.5'}</span></span>
 +                        </a>
 +                        <button
 +                            className={classNames(styles.menuBarItem, styles.hoverable, styles.duoButton)}
@@ -2190,6 +2190,662 @@ index 0000000..3332f3f
 +    font-size: 0.68rem;
 +    color: #555;
 +}
+diff --git a/src/components/sl-animate/stick-rig.js b/src/components/sl-animate/stick-rig.js
+new file mode 100644
+index 0000000..27a84e6
+--- /dev/null
++++ b/src/components/sl-animate/stick-rig.js
+@@ -0,0 +1,192 @@
++// Stick Lab Animate: stickman rig (Pivot-style). Bones hang off each other; dragging a joint
++// turns its bone, and everything further down the limb turns with it.
++// Coordinates are the Animate canvas (960 x 720). Angles are degrees, 0 = right, 90 = down.
++
++const BONES = [
++    // name, parent, length, default absolute angle
++    {name: 'torso', parent: null, len: 95, angle: -90},
++    {name: 'head', parent: 'torso', len: 34, angle: -90},
++    {name: 'armL1', parent: 'torso', len: 58, angle: 115},
++    {name: 'armL2', parent: 'armL1', len: 54, angle: 100},
++    {name: 'armR1', parent: 'torso', len: 58, angle: 65},
++    {name: 'armR2', parent: 'armR1', len: 54, angle: 80},
++    {name: 'legL1', parent: null, len: 72, angle: 110},
++    {name: 'legL2', parent: 'legL1', len: 68, angle: 95},
++    {name: 'legR1', parent: null, len: 72, angle: 70},
++    {name: 'legR2', parent: 'legR1', len: 68, angle: 85},
++    {name: 'sword', parent: 'armR2', len: 100, angle: -20}
++];
++const BY_NAME = {};
++BONES.forEach(b => {
++    BY_NAME[b.name] = b;
++});
++const HEAD_R = 24;
++const HANDLE_R = 9;
++
++const rad = d => (d * Math.PI) / 180;
++const deg = r => (r * 180) / Math.PI;
++const wrap = a => {
++    let x = ((a + 180) % 360 + 360) % 360 - 180;
++    if (x === -180) x = 180;
++    return x;
++};
++
++let nextRigId = 1;
++
++/** A new stickman standing with its hips at (x, y). */
++const makeRig = (x, y, options = {}) => {
++    const id = nextRigId++;
++    const rel = {};
++    for (const bone of BONES) {
++        const parentAbs = bone.parent ? BY_NAME[bone.parent].angle : 0;
++        rel[bone.name] = wrap(bone.angle - parentAbs);
++    }
++    return {
++        rig: {id, color: options.color || '#121212', width: options.width || 14, sword: !!options.sword},
++        pose: {x, y, rel}
++    };
++};
++
++const clonePose = pose => ({x: pose.x, y: pose.y, rel: {...pose.rel}});
++
++/** Positions of every joint: {hip: {x,y}, torso: {start, end, angle}, ...} */
++const solve = pose => {
++    const out = {hip: {x: pose.x, y: pose.y}};
++    for (const bone of BONES) {
++        const parent = bone.parent ? out[bone.parent] : null;
++        const start = parent ? parent.end : out.hip;
++        const abs = (parent ? parent.angle : 0) + pose.rel[bone.name];
++        const end = {x: start.x + (Math.cos(rad(abs)) * bone.len), y: start.y + (Math.sin(rad(abs)) * bone.len)};
++        out[bone.name] = {start, end, angle: abs};
++    }
++    return out;
++};
++
++const draw = (ctx, rig, pose, {handles = false, selected = false, alpha = 1, tint = null} = {}) => {
++    const j = solve(pose);
++    ctx.save();
++    ctx.globalAlpha *= alpha;
++    const color = tint || rig.color;
++    ctx.lineCap = 'round';
++    ctx.lineJoin = 'round';
++    if (rig.sword) {
++        const s = j.sword;
++        ctx.strokeStyle = tint || '#8a9bb3';
++        ctx.lineWidth = Math.max(4, rig.width * 0.55);
++        ctx.beginPath();
++        ctx.moveTo(s.start.x, s.start.y);
++        ctx.lineTo(s.end.x, s.end.y);
++        ctx.stroke();
++        // cross guard
++        const gx = Math.cos(rad(s.angle + 90)) * 14;
++        const gy = Math.sin(rad(s.angle + 90)) * 14;
++        const hx = s.start.x + (Math.cos(rad(s.angle)) * 16);
++        const hy = s.start.y + (Math.sin(rad(s.angle)) * 16);
++        ctx.strokeStyle = tint || '#5d4a2a';
++        ctx.beginPath();
++        ctx.moveTo(hx - gx, hy - gy);
++        ctx.lineTo(hx + gx, hy + gy);
++        ctx.stroke();
++    }
++    ctx.strokeStyle = color;
++    ctx.lineWidth = rig.width;
++    ctx.beginPath();
++    for (const name of ['legL1', 'legL2', 'legR1', 'legR2', 'torso', 'armL1', 'armL2', 'armR1', 'armR2']) {
++        const b = j[name];
++        ctx.moveTo(b.start.x, b.start.y);
++        ctx.lineTo(b.end.x, b.end.y);
++    }
++    ctx.stroke();
++    ctx.fillStyle = color;
++    ctx.beginPath();
++    ctx.arc(j.head.end.x, j.head.end.y, HEAD_R * (rig.width / 14) ** 0.3, 0, Math.PI * 2);
++    ctx.fill();
++    if (handles) {
++        for (const bone of BONES) {
++            if (bone.name === 'sword' && !rig.sword) continue;
++            const p = j[bone.name].end;
++            ctx.beginPath();
++            ctx.arc(p.x, p.y, HANDLE_R, 0, Math.PI * 2);
++            ctx.fillStyle = '#e53935';
++            ctx.fill();
++            ctx.lineWidth = 2;
++            ctx.strokeStyle = '#ffffff';
++            ctx.stroke();
++        }
++        ctx.beginPath();
++        ctx.arc(j.hip.x, j.hip.y, HANDLE_R + 3, 0, Math.PI * 2);
++        ctx.fillStyle = '#fb8c00';
++        ctx.fill();
++        ctx.lineWidth = selected ? 4 : 2;
++        ctx.strokeStyle = selected ? '#1e88e5' : '#ffffff';
++        ctx.stroke();
++    }
++    ctx.restore();
++};
++
++/** Which handle is under (x, y)? Returns 'hip', a bone name, or null. */
++const hitTest = (rig, pose, x, y, radius = 20) => {
++    const j = solve(pose);
++    let best = null;
++    let bestD = radius;
++    const consider = (name, p) => {
++        const d = Math.hypot(p.x - x, p.y - y);
++        if (d <= bestD) {
++            best = name;
++            bestD = d;
++        }
++    };
++    consider('hip', j.hip);
++    for (const bone of BONES) {
++        if (bone.name === 'sword' && !rig.sword) continue;
++        consider(bone.name, j[bone.name].end);
++    }
++    return best;
++};
++
++/** Turn a bone so its end points at (x, y). Children follow. */
++const aimBone = (pose, boneName, x, y) => {
++    const j = solve(pose);
++    const bone = j[boneName];
++    const abs = deg(Math.atan2(y - bone.start.y, x - bone.start.x));
++    const parentAbs = BY_NAME[boneName].parent ? j[BY_NAME[boneName].parent].angle : 0;
++    const next = clonePose(pose);
++    next.rel[boneName] = wrap(abs - parentAbs);
++    return next;
++};
++
++const lerpPose = (a, b, t) => {
++    const out = {x: a.x + ((b.x - a.x) * t), y: a.y + ((b.y - a.y) * t), rel: {}};
++    for (const name of Object.keys(a.rel)) {
++        const d = wrap(b.rel[name] - a.rel[name]);
++        out.rel[name] = wrap(a.rel[name] + (d * t));
++    }
++    return out;
++};
++
++/** Face the other way. */
++const mirrorPose = pose => {
++    const j = solve(pose);
++    const out = clonePose(pose);
++    // mirror absolute angles across the vertical, then rebuild relative angles
++    const abs = {};
++    for (const bone of BONES) abs[bone.name] = wrap(180 - j[bone.name].angle);
++    const swapped = abs;
++    for (const bone of BONES) {
++        const parentAbs = bone.parent ? swapped[bone.parent] : 0;
++        out.rel[bone.name] = wrap(swapped[bone.name] - parentAbs);
++    }
++    return out;
++};
++
++export {
++    BONES,
++    makeRig,
++    clonePose,
++    solve,
++    draw,
++    hitTest,
++    aimBone,
++    lerpPose,
++    mirrorPose
++};
+diff --git a/src/components/sl-battle/battle-editor.jsx b/src/components/sl-battle/battle-editor.jsx
+new file mode 100644
+index 0000000..bac8639
+--- /dev/null
++++ b/src/components/sl-battle/battle-editor.jsx
+@@ -0,0 +1,179 @@
++// Stick Lab 1.5: the Stickman battle pack window (Costumes tab).
++import React from 'react';
++import PropTypes from 'prop-types';
++import classNames from 'classnames';
++import styles from './battle.css';
++import {UNITS, TEAMS, unitCostumes, unitScripts} from './battle-pack';
++import {emptySprite} from '../../lib/empty-assets';
++import {getWorkspace} from '../../lib/sl-workspace-registry';
++import {applyText} from '../../lib/sl-text-code/apply';
++
++const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
++const dataUrl = svg => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
++
++class BattleEditor extends React.Component {
++    constructor (props) {
++        super(props);
++        this.state = {unit: 'Swordsman', team: 'Blue', busy: false, message: null};
++        this.handleClose = () => this.props.onClose(false);
++        this.handleAddHere = () => this.add(false);
++        this.handleAddSprite = () => this.add(true);
++    }
++    async addCostumes (target, costumes) {
++        const vm = this.props.vm;
++        const storage = vm.runtime.storage;
++        for (const c of costumes) {
++            const existing = target.getCostumes().findIndex(x => x.name === c.name);
++            if (existing !== -1) {
++                target.setCostume(existing);
++                vm.updateSvg(existing, c.svg, c.cx, c.cy);
++                continue;
++            }
++            const data = new TextEncoder().encode(c.svg);
++            const asset = storage.createAsset(storage.AssetType.ImageVector, storage.DataFormat.SVG, data, null, true);
++            await vm.addCostume(`${asset.assetId}.svg`, {
++                name: c.name,
++                dataFormat: 'svg',
++                asset,
++                assetId: asset.assetId,
++                md5: `${asset.assetId}.svg`,
++                rotationCenterX: c.cx,
++                rotationCenterY: c.cy
++            }, target.id);
++        }
++    }
++    async add (newSprite) {
++        const vm = this.props.vm;
++        const {unit, team} = this.state;
++        if (this.state.busy) return;
++        this.setState({busy: true, message: 'Adding...'});
++        try {
++            const costumes = unitCostumes(unit, team);
++            let target = vm.editingTarget;
++            if (newSprite) {
++                let name = `${team} ${unit}`;
++                let n = 2;
++                while (vm.runtime.targets.some(t => t.isOriginal && t.getName() === name)) name = `${team} ${unit}${n++}`;
++                await vm.addSprite(JSON.stringify(emptySprite(name, 'pop', 'look')));
++                target = vm.runtime.targets.find(t => t.isOriginal && !t.isStage && t.getName() === name) || vm.editingTarget;
++                vm.setEditingTarget(target.id);
++                vm.updateSvg(0, costumes[0].svg, costumes[0].cx, costumes[0].cy);
++                target.renameCostume(0, costumes[0].name);
++                await this.addCostumes(target, costumes.slice(1));
++                target.setCostume(0);
++                await sleep(450);
++                const ws = getWorkspace();
++                let note = '';
++                if (ws) {
++                    applyText(unitScripts(unit), {ScratchBlocks: ws.ScratchBlocks, workspace: ws.workspace, vm,
++                        toolboxXML: this.props.toolboxXML});
++                    await sleep(350);
++                    note = ' with walk, attack and die scripts (arrow keys walk, space attacks)';
++                }
++                vm.emitTargetsUpdate();
++                vm.runtime.emitProjectChanged();
++                this.props.onClose(true, `Made the sprite "${name}"${note}.`);
++            } else {
++                if (!target || target.isStage) throw new Error('Pick a sprite first.');
++                await this.addCostumes(target, costumes);
++                const idle = target.getCostumes().findIndex(c => c.name === costumes[0].name);
++                if (idle !== -1) target.setCostume(idle);
++                vm.emitTargetsUpdate();
++                vm.runtime.emitProjectChanged();
++                this.props.onClose(true, `Added ${costumes.length} ${unit.toLowerCase()} costumes.`);
++            }
++        } catch (e) {
++            console.error(e); // eslint-disable-line no-console
++            this.setState({busy: false, message: `Couldn't add it: ${e.message}`});
++        }
++    }
++    render () {
++        const {unit, team, busy, message} = this.state;
++        const frames = unitCostumes(unit, team);
++        const isStage = this.props.vm.editingTarget && this.props.vm.editingTarget.isStage;
++        return (
++            <div className={styles.battle}>
++                <div className={styles.topBar}>
++                    <span className={styles.title}>{'Stickman battle pack'}</span>
++                    <span className={styles.spacer} />
++                    <button
++                        className={classNames(styles.button, styles.plain)}
++                        onClick={this.handleClose}
++                    >{'Close'}</button>
++                </div>
++                <div className={styles.body}>
++                    <div className={styles.row}>
++                        <span className={styles.label}>{'Unit'}</span>
++                        {Object.keys(UNITS).map(u => (
++                            <button
++                                key={u}
++                                className={classNames(styles.unit, {[styles.selected]: u === unit})}
++                                onClick={() => this.setState({unit: u})} // eslint-disable-line react/jsx-no-bind
++                            >
++                                <img
++                                    alt=""
++                                    src={dataUrl(unitCostumes(u, team)[0].svg)}
++                                />
++                                {u}
++                            </button>
++                        ))}
++                    </div>
++                    <div className={styles.row}>
++                        <span className={styles.label}>{'Team'}</span>
++                        {Object.keys(TEAMS).map(t => (
++                            <button
++                                key={t}
++                                className={classNames(styles.team, {[styles.selected]: t === team})}
++                                onClick={() => this.setState({team: t})} // eslint-disable-line react/jsx-no-bind
++                            >
++                                <span
++                                    className={styles.swatch}
++                                    style={{background: TEAMS[t]}}
++                                />
++                                {t}
++                            </button>
++                        ))}
++                    </div>
++                    <div>
++                        <div className={styles.label}>{`${frames.length} costumes`}</div>
++                        <div className={styles.frames}>
++                            {frames.map(f => (
++                                <figure key={f.name}>
++                                    <img
++                                        alt=""
++                                        src={dataUrl(f.svg)}
++                                    />
++                                    {f.name.split(' ')[1]}
++                                </figure>
++                            ))}
++                        </div>
++                    </div>
++                    <div className={styles.row}>
++                        <button
++                            className={styles.button}
++                            disabled={busy}
++                            onClick={this.handleAddSprite}
++                        >{'New sprite with scripts'}</button>
++                        {isStage ? null : (
++                            <button
++                                className={classNames(styles.button, styles.plain)}
++                                disabled={busy}
++                                onClick={this.handleAddHere}
++                            >{'Add costumes to this sprite'}</button>
++                        )}
++                        {message ? <span className={styles.message}>{message}</span> : null}
++                    </div>
++                    <div>{'Tip: use the "make sparks here" effect when a unit attacks, and the "when I hit" block to take damage.'}</div>
++                </div>
++            </div>
++        );
++    }
++}
++
++BattleEditor.propTypes = {
++    onClose: PropTypes.func.isRequired,
++    toolboxXML: PropTypes.string,
++    vm: PropTypes.object.isRequired // eslint-disable-line react/forbid-prop-types
++};
++
++export default BattleEditor;
+diff --git a/src/components/sl-battle/battle-pack.js b/src/components/sl-battle/battle-pack.js
+new file mode 100644
+index 0000000..11f905a
+--- /dev/null
++++ b/src/components/sl-battle/battle-pack.js
+@@ -0,0 +1,202 @@
++// Stick Lab 1.5: the Stickman battle pack. Draws ready-made stickman units as SVG costumes.
++// Angles are in degrees from straight down: 0 = hanging down, 90 = pointing forward (right), 180 = straight up.
++
++const UNITS = {
++    Swordsman: {weapon: 'sword', scale: 1},
++    Archer: {weapon: 'bow', scale: 1},
++    Spearman: {weapon: 'spear', scale: 1, shield: true},
++    Giant: {weapon: 'club', scale: 1.6},
++    Miner: {weapon: 'pickaxe', scale: 0.95, bag: true}
++};
++
++const TEAMS = {Blue: '#1e5aa8', Red: '#c62828', Green: '#2e7d32', Gold: '#c9a227', Black: '#222222'};
++
++// body sizes
++const TORSO = 26;
++const UPPER_ARM = 13;
++const LOWER_ARM = 12;
++const THIGH = 15;
++const SHIN = 15;
++const HEAD = 7;
++
++const rad = d => d * Math.PI / 180;
++const step = (p, angle, len) => ({x: p.x + (Math.sin(rad(angle)) * len), y: p.y + (Math.cos(rad(angle)) * len)});
++
++// poses: [frontArm, frontElbowBend, backArm, backElbowBend, frontLeg, frontKnee, backLeg, backKnee, lean]
++const P = (fa, fe, ba, be, fl, fk, bl, bk, lean = 0, fall = 0) => ({fa, fe, ba, be, fl, fk, bl, bk, lean, fall});
++
++const POSES = {
++    idle: P(35, 40, -15, 20, 12, 0, -12, 0),
++    walk1: P(30, 30, -25, 20, 28, 5, -22, 25),
++    walk2: P(10, 30, -5, 20, 8, 25, -6, 5),
++    walk3: P(-15, 30, 25, 20, -22, 25, 28, 5),
++    walk4: P(10, 30, -5, 20, -6, 5, 8, 25),
++    die1: P(70, 30, -50, 20, 25, 35, -10, 30, -15, -15),
++    die2: P(130, 20, 100, 10, 30, 15, 5, 20, -10, -50),
++    die3: P(170, 0, 160, 0, 8, 0, -6, 5, 0, -88)
++};
++
++const ATTACKS = {
++    sword: [P(165, -30, -20, 20, 18, 0, -18, 10), P(100, 0, -30, 20, 30, 10, -25, 5, 8), P(55, 10, -20, 20, 22, 5, -20, 10, 4)],
++    spear: [P(70, 80, 40, 40, 15, 0, -20, 10, -4), P(95, 0, 50, 30, 30, 10, -28, 5, 10), P(80, 40, 45, 40, 18, 0, -18, 10)],
++    bow: [P(90, 0, 80, 120, 15, 0, -15, 0), P(90, 0, 85, 150, 15, 0, -15, 0, -3), P(90, 0, 60, 60, 15, 0, -15, 0)],
++    club: [P(175, -20, 160, -20, 15, 0, -15, 10, -6), P(80, 0, 70, 0, 25, 20, -20, 5, 14), P(50, 20, 40, 20, 18, 10, -18, 10, 6)],
++    pickaxe: [P(170, -40, 150, -30, 15, 0, -15, 10, -5), P(70, 0, 60, 10, 22, 15, -20, 5, 12), P(45, 30, 35, 30, 15, 5, -15, 5, 6)]
++};
++
++const weaponSvg = (weapon, hand, angle, s) => {
++    // the weapon points along the lower arm
++    const tip = len => step(hand, angle, len * s);
++    const back = len => step(hand, angle + 180, len * s);
++    const line = (a, b, color, width) => `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="${color}" stroke-width="${(width * s).toFixed(1)}" stroke-linecap="round"/>`;
++    if (weapon === 'sword') {
++        const g1 = step(hand, angle + 90, 4 * s);
++        const g2 = step(hand, angle - 90, 4 * s);
++        return line(back(3), tip(24), '#b9c4cf', 3.2) + line(g1, g2, '#6b4a2b', 2.5);
++    }
++    if (weapon === 'spear') {
++        const t = tip(30);
++        const t2 = tip(37);
++        const side1 = step(t, angle + 90, 3 * s);
++        const side2 = step(t, angle - 90, 3 * s);
++        return line(back(16), t, '#7a5230', 2.4) +
++            `<path d="M${side1.x.toFixed(1)} ${side1.y.toFixed(1)} L${t2.x.toFixed(1)} ${t2.y.toFixed(1)} L${side2.x.toFixed(1)} ${side2.y.toFixed(1)} Z" fill="#b9c4cf"/>`;
++    }
++    if (weapon === 'bow') {
++        const top = step(hand, angle - 90, 15 * s);
++        const bottom = step(hand, angle + 90, 15 * s);
++        const bulge = step(hand, angle, 7 * s);
++        return `<path d="M${top.x.toFixed(1)} ${top.y.toFixed(1)} Q${bulge.x.toFixed(1)} ${bulge.y.toFixed(1)} ${bottom.x.toFixed(1)} ${bottom.y.toFixed(1)}" fill="none" stroke="#8a5a2b" stroke-width="${(2.4 * s).toFixed(1)}"/>` +
++            line(top, bottom, '#dddddd', 0.8);
++    }
++    if (weapon === 'club') {
++        const t = tip(26);
++        return line(back(2), t, '#6b4a2b', 5) + `<circle cx="${t.x.toFixed(1)}" cy="${t.y.toFixed(1)}" r="${(4.5 * s).toFixed(1)}" fill="#6b4a2b"/>`;
++    }
++    if (weapon === 'pickaxe') {
++        const t = tip(20);
++        const h1 = step(t, angle + 90, 8 * s);
++        const h2 = step(t, angle - 90, 8 * s);
++        return line(back(2), t, '#7a5230', 2.4) +
++            `<path d="M${h1.x.toFixed(1)} ${h1.y.toFixed(1)} Q${t.x.toFixed(1)} ${(t.y - (3 * s)).toFixed(1)} ${h2.x.toFixed(1)} ${h2.y.toFixed(1)}" fill="none" stroke="#9aa3ad" stroke-width="${(2.6 * s).toFixed(1)}" stroke-linecap="round"/>`;
++    }
++    return '';
++};
++
++/** Draw one costume. Returns {svg, cx, cy}. */
++const drawUnit = (unitName, team, pose) => {
++    const unit = UNITS[unitName];
++    const s = unit.scale;
++    const color = TEAMS[team] || TEAMS.Blue;
++    const size = Math.round(150 * s);
++    const hip = {x: size / 2, y: size * 0.6};
++    const lean = pose.lean || 0;
++    // the body leans around the hip; when dying, the whole figure tips over around the feet
++    const neck = step(hip, 180 - lean, TORSO * s);
++    const head = step(neck, 180 - lean, HEAD * s * 1.15);
++    const shoulder = step(hip, 180 - lean, (TORSO - 3) * s);
++    const limb = (start, a1, l1, bend, l2, tilt) => {
++        const mid = step(start, a1 - tilt, l1 * s);
++        const end = step(mid, a1 + bend - tilt, l2 * s);
++        return {mid, end, angle: a1 + bend - tilt};
++    };
++    const fArm = limb(shoulder, pose.fa, UPPER_ARM, pose.fe, LOWER_ARM, lean);
++    const bArm = limb(shoulder, pose.ba, UPPER_ARM, pose.be, LOWER_ARM, lean);
++    const fLeg = limb(hip, pose.fl, THIGH, -pose.fk, SHIN, 0);
++    const bLeg = limb(hip, pose.bl, THIGH, -pose.bk, SHIN, 0);
++    const w = (unit.weapon === 'club' ? 4.6 : 4) * s;
++    const path = (a, l) => `M${a.x.toFixed(1)} ${a.y.toFixed(1)} L${l.mid.x.toFixed(1)} ${l.mid.y.toFixed(1)} L${l.end.x.toFixed(1)} ${l.end.y.toFixed(1)}`;
++    let body = '';
++    // back limbs a little darker
++    body += `<path d="${path(hip, bLeg)} ${path(shoulder, bArm)}" fill="none" stroke="${color}" stroke-opacity="0.75" stroke-width="${w.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`;
++    if (unit.shield) {
++        body += `<circle cx="${bArm.end.x.toFixed(1)}" cy="${bArm.end.y.toFixed(1)}" r="${(9 * s).toFixed(1)}" fill="#c9a227" stroke="#7a5f12" stroke-width="${(1.6 * s).toFixed(1)}"/>`;
++    }
++    if (unit.bag) {
++        const b = step(shoulder, 200 - lean, 10 * s);
++        body += `<ellipse cx="${(b.x - (5 * s)).toFixed(1)}" cy="${b.y.toFixed(1)}" rx="${(6 * s).toFixed(1)}" ry="${(8 * s).toFixed(1)}" fill="#8a6a3b"/>`;
++    }
++    body += `<path d="M${hip.x.toFixed(1)} ${hip.y.toFixed(1)} L${neck.x.toFixed(1)} ${neck.y.toFixed(1)} ${path(hip, fLeg)}" fill="none" stroke="${color}" stroke-width="${w.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`;
++    body += `<circle cx="${head.x.toFixed(1)}" cy="${head.y.toFixed(1)}" r="${(HEAD * s).toFixed(1)}" fill="${color}"/>`;
++    if (unit.weapon === 'pickaxe' || unit.bag) {
++        // miner's helmet
++        body += `<path d="M${(head.x - (HEAD * s)).toFixed(1)} ${(head.y - (1 * s)).toFixed(1)} A${(HEAD * s).toFixed(1)} ${(HEAD * s).toFixed(1)} 0 0 1 ${(head.x + (HEAD * s)).toFixed(1)} ${(head.y - (1 * s)).toFixed(1)} Z" fill="#f2c94c"/>`;
++    }
++    body += `<circle cx="${(head.x + (2.6 * s)).toFixed(1)}" cy="${(head.y - (0.8 * s)).toFixed(1)}" r="${(1.2 * s).toFixed(1)}" fill="#fff"/>`;
++    body += weaponSvg(unit.weapon, fArm.end, fArm.angle, s);
++    body += `<path d="${path(shoulder, fArm)}" fill="none" stroke="${color}" stroke-width="${w.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`;
++    let group = body;
++    if (pose.fall) {
++        // falling over backwards: rotate the whole figure around the feet
++        const feet = {x: hip.x, y: hip.y + ((THIGH + SHIN) * s)};
++        const shift = Math.abs(Math.sin(rad(pose.fall))) * 30 * s;
++        group = `<g transform="translate(${shift.toFixed(1)} 0) rotate(${pose.fall} ${feet.x.toFixed(1)} ${feet.y.toFixed(1)})">${body}</g>`;
++    }
++    return {
++        svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${group}</svg>`,
++        cx: size / 2,
++        cy: hip.y + ((THIGH + SHIN) * s * 0.3)
++    };
++};
++
++/** Every costume for a unit, in order. */
++const unitCostumes = (unitName, team) => {
++    const prefix = unitName.toLowerCase();
++    const out = [];
++    const add = (name, pose) => out.push({name: `${prefix} ${name}`, ...drawUnit(unitName, team, pose)});
++    add('idle', POSES.idle);
++    ['walk1', 'walk2', 'walk3', 'walk4'].forEach(n => add(n, POSES[n]));
++    ATTACKS[UNITS[unitName].weapon].forEach((pose, i) => add(`attack${i + 1}`, pose));
++    ['die1', 'die2', 'die3'].forEach(n => add(n, POSES[n]));
++    return out;
++};
++
++/** Text-coding scripts that play the animations. */
++const unitScripts = unitName => {
++    const p = unitName.toLowerCase();
++    return `when_flag_clicked {
++    switch_costume("${p} idle")
++    set_rotation_style("left-right")
++}
++define "walk" () {
++    switch_costume("${p} walk1")
++    wait(0.08)
++    switch_costume("${p} walk2")
++    wait(0.08)
++    switch_costume("${p} walk3")
++    wait(0.08)
++    switch_costume("${p} walk4")
++    wait(0.08)
++}
++define "attack" () {
++    switch_costume("${p} attack1")
++    wait(0.12)
++    switch_costume("${p} attack2")
++    wait(0.1)
++    switch_costume("${p} attack3")
++    wait(0.15)
++    switch_costume("${p} idle")
++}
++define "die" () {
++    switch_costume("${p} die1")
++    wait(0.12)
++    switch_costume("${p} die2")
++    wait(0.12)
++    switch_costume("${p} die3")
++}
++when_key_pressed("right arrow") {
++    point_in_direction(90)
++    change_x(6)
++    call "walk" ()
++}
++when_key_pressed("left arrow") {
++    point_in_direction(-90)
++    change_x(-6)
++    call "walk" ()
++}
++when_key_pressed("space") {
++    call "attack" ()
++}`;
++};
++
++export {UNITS, TEAMS, drawUnit, unitCostumes, unitScripts, POSES};
+diff --git a/src/components/sl-battle/battle.css b/src/components/sl-battle/battle.css
+new file mode 100644
+index 0000000..66994e6
+--- /dev/null
++++ b/src/components/sl-battle/battle.css
+@@ -0,0 +1,59 @@
++/* Stick Lab 1.5 battle pack (Aero style, like the level editor) */
++.battle {
++    position: absolute;
++    inset: 0;
++    z-index: 60;
++    display: flex;
++    flex-direction: column;
++    background: #dfe8f3;
++    font-family: Verdana, Tahoma, "Segoe UI", sans-serif;
++    font-size: 0.75rem;
++    color: #1f3550;
++    border: 1px solid #9db4cf;
++    border-radius: 3px;
++}
++.top-bar {
++    display: flex;
++    align-items: center;
++    gap: 0.75rem;
++    padding: 0.4rem 0.6rem;
++    background: linear-gradient(180deg, #a3d2f7 0%, #62a7e8 46%, #2a6ab8 50%, #3283d6 100%);
++    color: #ffffff;
++    border-bottom: 1px solid #1b4f8f;
++}
++.title { font: bold 1rem "Trebuchet MS", "Segoe UI", Verdana, sans-serif; text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3); }
++.spacer { flex: 1; }
++.body { flex: 1; overflow: auto; padding: 0.8rem; display: flex; flex-direction: column; gap: 0.8rem; }
++.row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
++.label { font-weight: bold; min-width: 4rem; }
++.unit, .team {
++    border: 1px solid #9db4cf;
++    border-radius: 6px;
++    background: linear-gradient(180deg, #ffffff, #e6eef8);
++    padding: 0.3rem;
++    cursor: pointer;
++    font: inherit;
++    color: inherit;
++    display: flex;
++    flex-direction: column;
++    align-items: center;
++    gap: 0.2rem;
++}
++.unit img { width: 64px; height: 64px; }
++.selected { border-color: #2a6ab8; box-shadow: 0 0 0 2px #62a7e8; background: linear-gradient(180deg, #f2f8ff, #cfe3fa); }
++.swatch { width: 1.2rem; height: 1.2rem; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.3); }
++.frames { display: flex; flex-wrap: wrap; gap: 0.3rem; background: #ffffff; border: 1px solid #9db4cf; border-radius: 4px; padding: 0.4rem; }
++.frames figure { margin: 0; text-align: center; font-size: 0.65rem; }
++.frames img { width: 56px; height: 56px; display: block; }
++.button {
++    border: 1px solid #1b4f8f;
++    border-radius: 3px;
++    padding: 0.3rem 0.8rem;
++    font: bold 0.75rem Verdana, Tahoma, sans-serif;
++    color: #ffffff;
++    cursor: pointer;
++    background: linear-gradient(180deg, #7cc0f5 0%, #3e8fdc 48%, #2167b8 52%, #2f7fd0 100%);
++}
++.button:disabled { opacity: 0.6; cursor: default; }
++.plain { color: #1f3550; background: linear-gradient(180deg, #ffffff, #dde7f3); border-color: #9db4cf; }
++.message { color: #1b4f8f; }
 diff --git a/src/components/sl-duo/duo-panel.jsx b/src/components/sl-duo/duo-panel.jsx
 new file mode 100644
 index 0000000..e9978d2
@@ -5554,19 +6210,22 @@ index 0000000..b28bce4
 +    font-weight: bold;
 +}
 diff --git a/src/containers/blocks.jsx b/src/containers/blocks.jsx
-index 1a93708..73d826d 100644
+index 1a93708..b47af97 100644
 --- a/src/containers/blocks.jsx
 +++ b/src/containers/blocks.jsx
-@@ -6,6 +6,8 @@ import PropTypes from 'prop-types';
+@@ -6,6 +6,11 @@ import PropTypes from 'prop-types';
  import React from 'react';
  import {intlShape, injectIntl, defineMessages} from 'react-intl';
  import VMScratchBlocks from '../lib/blocks';
 +import {defineRagdollBlocks} from '../lib/sl-ragdoll/blocks';
 +import {defineVmPhysicsBlocks} from '../lib/sl-physics/blocks';
++import {defineEffectsBlocks} from '../lib/sl-effects/blocks';
++import {touchBlocks} from '../lib/sl-touch/touch';
++import {defineOnlineBlocks} from '../lib/sl-online/blocks';
  import VM from 'scratch-vm';
  
  import log from '../lib/log.js';
-@@ -44,6 +46,7 @@ import AddonHooks from '../addons/hooks.js';
+@@ -44,6 +49,7 @@ import AddonHooks from '../addons/hooks.js';
  import LoadScratchBlocksHOC from '../lib/tw-load-scratch-blocks-hoc.jsx';
  import {findTopBlock} from '../lib/backpack/code-payload.js';
  import {gentlyRequestPersistentStorage} from '../lib/tw-persistent-storage.js';
@@ -5574,25 +6233,31 @@ index 1a93708..73d826d 100644
  
  // TW: Strings we add to scratch-blocks are localized here
  const messages = defineMessages({
-@@ -90,6 +93,8 @@ class Blocks extends React.Component {
+@@ -90,6 +96,11 @@ class Blocks extends React.Component {
      constructor (props) {
          super(props);
          this.ScratchBlocks = VMScratchBlocks(props.vm, false);
 +        defineRagdollBlocks(this.ScratchBlocks);
 +        defineVmPhysicsBlocks(this.ScratchBlocks, this.props.vm);
++        defineEffectsBlocks(this.ScratchBlocks);
++        touchBlocks(this.ScratchBlocks);
++        defineOnlineBlocks(this.ScratchBlocks);
  
          window.ScratchBlocks = this.ScratchBlocks;
          AddonHooks.blockly = this.ScratchBlocks;
-@@ -136,6 +141,8 @@ class Blocks extends React.Component {
+@@ -136,6 +147,11 @@ class Blocks extends React.Component {
      }
      componentDidMount () {
          this.ScratchBlocks = VMScratchBlocks(this.props.vm, this.props.useCatBlocks);
 +        defineRagdollBlocks(this.ScratchBlocks);
 +        defineVmPhysicsBlocks(this.ScratchBlocks, this.props.vm);
++        defineEffectsBlocks(this.ScratchBlocks);
++        touchBlocks(this.ScratchBlocks);
++        defineOnlineBlocks(this.ScratchBlocks);
          this.ScratchBlocks.prompt = this.handlePromptStart;
          this.ScratchBlocks.statusButtonCallback = this.handleConnectionModalStart;
          this.ScratchBlocks.recordSoundCallback = this.handleOpenSoundRecorder;
-@@ -166,6 +173,7 @@ class Blocks extends React.Component {
+@@ -166,6 +182,7 @@ class Blocks extends React.Component {
          );
          this.workspace = this.ScratchBlocks.inject(this.blocks, workspaceConfig);
          AddonHooks.blocklyWorkspace = this.workspace;
@@ -5600,7 +6265,7 @@ index 1a93708..73d826d 100644
  
          // Register buttons under new callback keys for creating variables,
          // lists, and procedures from extensions.
-@@ -287,6 +295,7 @@ class Blocks extends React.Component {
+@@ -287,6 +304,7 @@ class Blocks extends React.Component {
      componentWillUnmount () {
          this.detachVM();
          this.unmounted = true;
@@ -5609,43 +6274,46 @@ index 1a93708..73d826d 100644
          clearTimeout(this.toolboxUpdateTimeout);
  
 diff --git a/src/containers/costume-tab.jsx b/src/containers/costume-tab.jsx
-index 86a0f10..695c42b 100644
+index 86a0f10..f7ef0fb 100644
 --- a/src/containers/costume-tab.jsx
 +++ b/src/containers/costume-tab.jsx
-@@ -6,6 +6,9 @@ import VM from 'scratch-vm';
+@@ -6,6 +6,10 @@ import VM from 'scratch-vm';
  
  import AssetPanel from '../components/asset-panel/asset-panel.jsx';
  import PaintEditorWrapper from './paint-editor-wrapper.jsx';
 +import AnimateEditor from '../components/sl-animate/animate-editor.jsx';
 +import animateStyles from '../components/sl-animate/animate.css';
 +import LevelEditor from '../components/sl-level/level-editor.jsx';
++import BattleEditor from '../components/sl-battle/battle-editor.jsx';
  import {connect} from 'react-redux';
  import {handleFileUpload, costumeUpload} from '../lib/file-uploader.js';
  import errorBoundaryHOC from '../lib/error-boundary-hoc.jsx';
-@@ -75,6 +78,10 @@ class CostumeTab extends React.Component {
+@@ -75,6 +79,12 @@ class CostumeTab extends React.Component {
      constructor (props) {
          super(props);
          bindAll(this, [
 +            'handleOpenAnimate',
 +            'handleCloseAnimate',
 +            'handleOpenLevel',
++            'handleOpenBattle',
++            'handleCloseBattle',
 +            'handleCloseLevel',
              'handleSelectCostume',
              'handleDeleteCostume',
              'handleDuplicateCostume',
-@@ -95,9 +102,9 @@ class CostumeTab extends React.Component {
+@@ -95,9 +105,9 @@ class CostumeTab extends React.Component {
          } = props;
          const target = editingTarget && sprites[editingTarget] ? sprites[editingTarget] : stage;
          if (target && target.currentCostume) {
 -            this.state = {selectedCostumeIndex: target.currentCostume};
-+            this.state = {selectedCostumeIndex: target.currentCostume, animateOpen: false, levelOpen: false, levelMessage: null};
++            this.state = {selectedCostumeIndex: target.currentCostume, animateOpen: false, levelOpen: false, battleOpen: false, levelMessage: null};
          } else {
 -            this.state = {selectedCostumeIndex: 0};
-+            this.state = {selectedCostumeIndex: 0, animateOpen: false, levelOpen: false, levelMessage: null};
++            this.state = {selectedCostumeIndex: 0, animateOpen: false, levelOpen: false, battleOpen: false, levelMessage: null};
          }
      }
      componentWillReceiveProps (nextProps) {
-@@ -244,6 +251,24 @@ class CostumeTab extends React.Component {
+@@ -244,6 +254,33 @@ class CostumeTab extends React.Component {
          // https://github.com/LLK/scratch-flash/blob/9fbac92ef3d09ceca0c0782f8a08deaa79e4df69/src/ui/media/MediaInfo.as#L224-L237
          return `${Math.ceil(size[0] / resolution)} x ${Math.ceil(size[1] / resolution)}`;
      }
@@ -5667,10 +6335,19 @@ index 86a0f10..695c42b 100644
 +            this.setState({selectedCostumeIndex: this.props.vm.editingTarget.currentCostume});
 +        }
 +    }
++    handleOpenBattle () {
++        this.setState({battleOpen: true, levelMessage: null});
++    }
++    handleCloseBattle (saved, message) {
++        this.setState({battleOpen: false, levelMessage: saved ? message : null});
++        if (saved && this.props.vm.editingTarget) {
++            this.setState({selectedCostumeIndex: this.props.vm.editingTarget.currentCostume});
++        }
++    }
      render () {
          const {
              dispatchUpdateRestore, // eslint-disable-line no-unused-vars
-@@ -274,6 +299,7 @@ class CostumeTab extends React.Component {
+@@ -274,6 +311,7 @@ class CostumeTab extends React.Component {
              dragPayload: costume
          })) : [];
          return (
@@ -5678,7 +6355,7 @@ index 86a0f10..695c42b 100644
              <AssetPanel
                  buttons={[
                      {
-@@ -318,12 +344,67 @@ class CostumeTab extends React.Component {
+@@ -318,12 +356,92 @@ class CostumeTab extends React.Component {
                  onItemClick={this.handleSelectCostume}
              >
                  {target.costumes ?
@@ -5721,8 +6398,26 @@ index 86a0f10..695c42b 100644
 +                                /></svg>
 +                                {'Level editor'}
 +                            </button>
++                            <button
++                                className={animateStyles.animateBarButton}
++                                onClick={this.handleOpenBattle}
++                            >
++                                <svg
++                                    aria-hidden="true"
++                                    height="16"
++                                    viewBox="0 0 24 24"
++                                    width="16"
++                                ><path
++                                    d="M12 3 A2.5 2.5 0 1 1 12 8 A2.5 2.5 0 1 1 12 3 M12 8 V15 M12 15 L8 21 M12 15 L16 21 M12 10 L7 13 M12 10 L18 6 M16 3 L21 8"
++                                    fill="none"
++                                    stroke="currentColor"
++                                    strokeLinecap="round"
++                                    strokeWidth="2"
++                                /></svg>
++                                {'Battle pack'}
++                            </button>
 +                            <span>{this.state.levelMessage ||
-+                                'Animate: a Flash-style timeline. Level editor: paint a game level from tiles.'}</span>
++                                'Animate: a Flash-style timeline. Level editor: paint a game level. Battle pack: ready-made stickman units.'}</span>
 +                        </div>
 +                        <div className={animateStyles.withBarBody}>
 +                            <PaintEditorWrapper
@@ -5739,6 +6434,13 @@ index 86a0f10..695c42b 100644
 +                    onClose={this.handleCloseLevel}
 +                />
 +            ) : null}
++            {this.state.battleOpen ? (
++                <BattleEditor
++                    toolboxXML={this.props.toolboxXML}
++                    vm={this.props.vm}
++                    onClose={this.handleCloseBattle}
++                />
++            ) : null}
 +            {this.state.animateOpen ? (
 +                <AnimateEditor
 +                    vm={this.props.vm}
@@ -5749,6 +6451,24 @@ index 86a0f10..695c42b 100644
          );
      }
  }
+@@ -331,6 +449,7 @@ class CostumeTab extends React.Component {
+ CostumeTab.propTypes = {
+     dispatchUpdateRestore: PropTypes.func,
+     editingTarget: PropTypes.string,
++    toolboxXML: PropTypes.string,
+     intl: intlShape,
+     isRtl: PropTypes.bool,
+     onActivateSoundsTab: PropTypes.func.isRequired,
+@@ -360,7 +479,8 @@ const mapStateToProps = state => ({
+     isRtl: state.locales.isRtl,
+     sprites: state.scratchGui.targets.sprites,
+     stage: state.scratchGui.targets.stage,
+-    dragging: state.scratchGui.assetDrag.dragging
++    dragging: state.scratchGui.assetDrag.dragging,
++    toolboxXML: state.scratchGui.toolbox.toolboxXML
+ });
+ 
+ const mapDispatchToProps = dispatch => ({
 diff --git a/src/containers/sb3-downloader.jsx b/src/containers/sb3-downloader.jsx
 index 3f4773c..882a839 100644
 --- a/src/containers/sb3-downloader.jsx
@@ -6011,17 +6731,20 @@ new file mode 100644
 index 0000000..fa22f48
 Binary files /dev/null and b/src/lib/default-project/stickman.svg differ
 diff --git a/src/lib/make-toolbox-xml.js b/src/lib/make-toolbox-xml.js
-index 679cac0..087869c 100644
+index 679cac0..2528681 100644
 --- a/src/lib/make-toolbox-xml.js
 +++ b/src/lib/make-toolbox-xml.js
-@@ -1,5 +1,6 @@
+@@ -1,5 +1,9 @@
  import LazyScratchBlocks from './tw-lazy-scratch-blocks';
  import {defaultBlockColors} from './themes';
 +import {physicsToolboxXML} from './sl-physics/blocks';
++import {effectsToolboxXML} from './sl-effects/blocks';
++import {onlineToolboxXML} from './sl-online/blocks';
++import {touchToolboxXML} from './sl-touch/touch';
  
  const categorySeparator = '<sep gap="36"/>';
  
-@@ -140,6 +141,20 @@ const motion = function (isInitialSetup, isStage, targetId, colors) {
+@@ -140,6 +144,20 @@ const motion = function (isInitialSetup, isStage, targetId, colors) {
          ${blockSeparator}
          <block type="motion_setrotationstyle"/>
          ${blockSeparator}
@@ -6042,14 +6765,32 @@ index 679cac0..087869c 100644
          <block id="${targetId}_xposition" type="motion_xposition"/>
          <block id="${targetId}_yposition" type="motion_yposition"/>
          <block id="${targetId}_direction" type="motion_direction"/>`}
-@@ -812,6 +827,7 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
+@@ -523,6 +541,8 @@ const sensing = function (isInitialSetup, isStage, targetId, colors) {
+         ${blockSeparator}
+         <block id="online" type="sensing_online"/>
+         <block type="sensing_username"/>
++        ${blockSeparator}
++        ${touchToolboxXML}
+         ${categorySeparator}
+     </category>
+     `;
+@@ -812,13 +832,16 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
      const everything = [
          xmlOpen,
          motionXML, gap,
 +        physicsToolboxXML(isStage), gap,
          looksXML, gap,
++        effectsToolboxXML(isStage), gap,
          soundXML, gap,
          eventsXML, gap,
+         controlXML, gap,
+         sensingXML, gap,
+         operatorsXML, gap,
+         variablesXML, gap,
++        onlineToolboxXML(), gap,
+         myBlocksXML
+     ];
+ 
 diff --git a/src/lib/sb-file-uploader-hoc.jsx b/src/lib/sb-file-uploader-hoc.jsx
 index 01f29db..a866883 100644
 --- a/src/lib/sb-file-uploader-hoc.jsx
@@ -6702,6 +7443,337 @@ index 0000000..5f0f0eb
 +};
 +
 +export {parseAttrs, buildGame, LOOKS, BACKDROPS};
+diff --git a/src/lib/sl-effects/blocks.js b/src/lib/sl-effects/blocks.js
+new file mode 100644
+index 0000000..4badded
+--- /dev/null
++++ b/src/lib/sl-effects/blocks.js
+@@ -0,0 +1,38 @@
++// Stick Lab 1.5: the Effects category.
++const COLOR = {primary: '#D0457C', secondary: '#B93C6D', tertiary: '#9A315A'};
++const EFFECTS = ['explosion', 'sparks', 'dust', 'smoke', 'confetti', 'hearts', 'stars'];
++
++const defineEffectsBlocks = ScratchBlocks => {
++    if (!ScratchBlocks || ScratchBlocks.Blocks.looks_sleffecthere) return;
++    const colours = {colour: COLOR.primary, colourSecondary: COLOR.secondary, colourTertiary: COLOR.tertiary};
++    const menu = (name, options) => ({type: 'field_dropdown', name, options: options.map(o => [o, o])});
++    const command = (opcode, message, args) => {
++        ScratchBlocks.Blocks[opcode] = {
++            init: function () {
++                this.jsonInit(Object.assign({message0: message, args0: args || [], extensions: ['shape_statement']}, colours));
++            }
++        };
++    };
++    command('looks_sleffecthere', 'make %1 here', [menu('EFFECT', EFFECTS)]);
++    command('looks_sleffectat', 'make %1 at x: %2 y: %3', [menu('EFFECT', EFFECTS), {type: 'input_value', name: 'X'},
++        {type: 'input_value', name: 'Y'}]);
++    command('looks_slweather', 'start %1 weather', [menu('WEATHER', ['rain', 'snow', 'leaves'])]);
++    command('looks_slweatherstop', 'stop weather');
++    command('looks_slshake', 'shake screen %1 for %2 seconds', [{type: 'input_value', name: 'STRENGTH'},
++        {type: 'input_value', name: 'SECS'}]);
++};
++
++const n = (name, value) => `<value name="${name}"><shadow type="math_number"><field name="NUM">${value}</field></shadow></value>`;
++
++const effectsToolboxXML = isStage => `
++    <category name="Effects" id="sleffects" colour="${COLOR.primary}" secondaryColour="${COLOR.tertiary}">
++        ${isStage ? '' : '<block type="looks_sleffecthere"/>'}
++        <block type="looks_sleffectat">${n('X', 0)}${n('Y', 0)}</block>
++        <sep gap="36"/>
++        <block type="looks_slweather"/>
++        <block type="looks_slweatherstop"/>
++        <sep gap="36"/>
++        <block type="looks_slshake">${n('STRENGTH', 6)}${n('SECS', 0.5)}</block>
++    </category>`;
++
++export {defineEffectsBlocks, effectsToolboxXML};
+diff --git a/src/lib/sl-effects/effects.js b/src/lib/sl-effects/effects.js
+new file mode 100644
+index 0000000..27eb84c
+--- /dev/null
++++ b/src/lib/sl-effects/effects.js
+@@ -0,0 +1,281 @@
++// Stick Lab 1.5: particles, weather and screen shake, drawn on a layer over the stage.
++import compatBlocks from 'scratch-vm/src/compiler/compat-blocks';
++
++const OPS = ['looks_sleffecthere', 'looks_sleffectat', 'looks_slweather', 'looks_slweatherstop', 'looks_slshake'];
++const MAX = 1500; // particles at once
++
++const rand = (a, b) => a + (Math.random() * (b - a));
++const pick = list => list[Math.floor(Math.random() * list.length)];
++
++class Effects {
++    constructor (vm) {
++        this.vm = vm;
++        this.runtime = vm.runtime;
++        this.parts = [];
++        this.weather = null;
++        this.shake = null;
++        this.layer = null;
++        this.frame = this.frame.bind(this);
++        this.running = false;
++        this.runtime.on('PROJECT_STOP_ALL', () => this.clear());
++        this.runtime.on('PROJECT_LOADED', () => this.clear());
++    }
++
++    clear () {
++        this.parts = [];
++        this.weather = null;
++        this.endShake();
++    }
++
++    // ------------------------------------------------------------------ the drawing layer
++
++    ensureLayer () {
++        const stageCanvas = this.runtime.renderer && this.runtime.renderer.canvas;
++        if (!stageCanvas || !stageCanvas.parentElement) return null;
++        if (!this.layer || this.layer.parentElement !== stageCanvas.parentElement) {
++            if (this.layer) this.layer.remove();
++            this.layer = document.createElement('canvas');
++            this.layer.className = 'sl-effects-layer';
++            this.layer.style.position = 'absolute';
++            this.layer.style.pointerEvents = 'none';
++            this.layer.style.zIndex = '5';
++            stageCanvas.parentElement.appendChild(this.layer);
++        }
++        // follow the stage canvas (it changes size in full screen and small stage mode)
++        const l = this.layer;
++        l.style.left = `${stageCanvas.offsetLeft}px`;
++        l.style.top = `${stageCanvas.offsetTop}px`;
++        l.style.width = `${stageCanvas.clientWidth}px`;
++        l.style.height = `${stageCanvas.clientHeight}px`;
++        const dpr = window.devicePixelRatio || 1;
++        const w = Math.max(1, Math.round(stageCanvas.clientWidth * dpr));
++        const h = Math.max(1, Math.round(stageCanvas.clientHeight * dpr));
++        if (l.width !== w || l.height !== h) {
++            l.width = w;
++            l.height = h;
++        }
++        return l;
++    }
++
++    start () {
++        if (this.running) return;
++        this.running = true;
++        this.last = performance.now();
++        requestAnimationFrame(this.frame);
++    }
++
++    frame (now) {
++        const dt = Math.min(0.05, (now - this.last) / 1000);
++        this.last = now;
++        const layer = this.ensureLayer();
++        this.update(dt, now);
++        if (layer) this.draw(layer);
++        const busy = this.parts.length || this.weather || this.shake;
++        if (busy) {
++            requestAnimationFrame(this.frame);
++        } else {
++            this.running = false;
++            if (layer) layer.getContext('2d').clearRect(0, 0, layer.width, layer.height);
++        }
++    }
++
++    // ------------------------------------------------------------------ particles
++
++    add (p) {
++        if (this.parts.length >= MAX) this.parts.shift();
++        this.parts.push(Object.assign({age: 0, rot: 0, spin: 0, gravity: 0, drag: 0.98, grow: 0, alpha: 1}, p));
++    }
++
++    burst (kind, x, y) {
++        if (kind === 'explosion') {
++            this.add({shape: 'flash', x, y, size: 10, grow: 220, life: 0.25, color: '#fff6c0'});
++            for (let i = 0; i < 46; i++) {
++                const a = rand(0, Math.PI * 2);
++                const sp = rand(60, 260);
++                this.add({shape: 'circle', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, size: rand(3, 8), grow: -4,
++                    life: rand(0.35, 0.8), color: pick(['#ffdd55', '#ff9a1f', '#ff5a1f', '#e53935', '#fff3a0']), drag: 0.92});
++            }
++            for (let i = 0; i < 14; i++) {
++                const a = rand(0, Math.PI * 2);
++                this.add({shape: 'circle', x, y, vx: Math.cos(a) * rand(15, 60), vy: Math.sin(a) * rand(15, 60) + 20, size: rand(8, 14),
++                    grow: 22, life: rand(0.9, 1.5), color: pick(['#555', '#6d6d6d', '#444']), alpha: 0.6, drag: 0.95});
++            }
++            this.startShake(5, 0.3);
++        } else if (kind === 'sparks') {
++            for (let i = 0; i < 26; i++) {
++                const a = rand(0, Math.PI * 2);
++                const sp = rand(90, 240);
++                this.add({shape: 'streak', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp + 60, size: rand(1.5, 2.5), gravity: -420,
++                    life: rand(0.3, 0.7), color: pick(['#fff6b0', '#ffd54a', '#ffb02e'])});
++            }
++        } else if (kind === 'dust') {
++            for (let i = 0; i < 16; i++) {
++                const dir = i % 2 ? 1 : -1;
++                this.add({shape: 'circle', x: x + rand(-8, 8), y: y + rand(-4, 4), vx: dir * rand(20, 80), vy: rand(5, 30), size: rand(4, 9),
++                    grow: 14, life: rand(0.5, 0.9), color: pick(['#cdbb9c', '#b9a585', '#ddd0b8']), alpha: 0.7, drag: 0.93});
++            }
++        } else if (kind === 'smoke') {
++            for (let i = 0; i < 18; i++) {
++                this.add({shape: 'circle', x: x + rand(-10, 10), y: y + rand(-6, 6), vx: rand(-12, 12), vy: rand(25, 60), size: rand(6, 12),
++                    grow: 20, life: rand(1.2, 2.2), color: pick(['#8a8a8a', '#9e9e9e', '#777']), alpha: 0.55, drag: 0.985});
++            }
++        } else if (kind === 'confetti') {
++            for (let i = 0; i < 60; i++) {
++                const a = rand(Math.PI * 0.15, Math.PI * 0.85);
++                const sp = rand(120, 300);
++                this.add({shape: 'rect', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, size: rand(3, 6), gravity: -260, spin: rand(-12, 12),
++                    life: rand(1.2, 2.2), color: pick(['#e53935', '#fdd835', '#43a047', '#1e88e5', '#8e24aa', '#fb8c00', '#f48fb1']), drag: 0.97});
++            }
++        } else if (kind === 'hearts') {
++            for (let i = 0; i < 10; i++) {
++                this.add({shape: 'heart', x: x + rand(-20, 20), y: y + rand(-5, 15), vx: rand(-15, 15), vy: rand(40, 80), size: rand(6, 11),
++                    life: rand(1, 1.8), color: pick(['#ff4d79', '#ff7aa2', '#e53935']), drag: 0.99});
++            }
++        } else if (kind === 'stars') {
++            for (let i = 0; i < 16; i++) {
++                const a = rand(0, Math.PI * 2);
++                this.add({shape: 'star', x, y, vx: Math.cos(a) * rand(40, 120), vy: Math.sin(a) * rand(40, 120), size: rand(4, 8), spin: rand(-6, 6),
++                    life: rand(0.6, 1.1), color: pick(['#ffd54a', '#fff3a0', '#ffffff']), drag: 0.94});
++            }
++        }
++        this.start();
++    }
++
++    setWeather (kind) {
++        this.weather = kind === 'none' ? null : {kind, carry: 0};
++        this.start();
++    }
++
++    startShake (strength, seconds) {
++        this.shake = {strength: Math.max(0, Math.min(40, strength)), until: performance.now() + (Math.max(0, seconds) * 1000)};
++        this.start();
++    }
++
++    endShake () {
++        this.shake = null;
++        const c = this.runtime.renderer && this.runtime.renderer.canvas;
++        if (c) c.style.transform = '';
++        if (this.layer) this.layer.style.transform = '';
++    }
++
++    update (dt, now) {
++        // weather keeps adding particles at the top of the stage
++        if (this.weather) {
++            const w = this.weather;
++            const rate = {rain: 160, snow: 40, leaves: 8}[w.kind] || 40;
++            w.carry += rate * dt;
++            while (w.carry >= 1) {
++                w.carry -= 1;
++                const x = rand(-260, 260);
++                if (w.kind === 'rain') {
++                    this.add({shape: 'streak', x, y: 190, vx: -40, vy: -520, size: 1.3, life: 1, color: '#8fb8e8', alpha: 0.8, drag: 1});
++                } else if (w.kind === 'snow') {
++                    this.add({shape: 'circle', x, y: 190, vx: rand(-10, 10), vy: rand(-40, -25), size: rand(1.5, 3.5), life: 9, color: '#ffffff',
++                        alpha: 0.95, drag: 1, wobble: rand(0, 6)});
++                } else {
++                    this.add({shape: 'leaf', x, y: 190, vx: rand(-20, 20), vy: rand(-45, -30), size: rand(4, 6), life: 9, spin: rand(-3, 3),
++                        color: pick(['#d9822b', '#e0a030', '#b8541b', '#7fa36a']), drag: 1, wobble: rand(0, 6)});
++                }
++            }
++        }
++        const keep = [];
++        for (const p of this.parts) {
++            p.age += dt;
++            if (p.age >= p.life || p.y < -200) continue;
++            p.vx *= Math.pow(p.drag, dt * 60);
++            p.vy *= Math.pow(p.drag, dt * 60);
++            p.vy += p.gravity * dt;
++            if (p.wobble !== undefined) p.vx += Math.sin((p.age * 2) + p.wobble) * 12 * dt;
++            p.x += p.vx * dt;
++            p.y += p.vy * dt;
++            p.size = Math.max(0.2, p.size + (p.grow * dt));
++            p.rot += p.spin * dt;
++            keep.push(p);
++        }
++        this.parts = keep;
++        if (this.shake) {
++            const c = this.runtime.renderer && this.runtime.renderer.canvas;
++            if (now >= this.shake.until) {
++                this.endShake();
++            } else if (c) {
++                const s = this.shake.strength * (c.clientWidth / 480);
++                const t = `translate(${rand(-s, s).toFixed(1)}px, ${rand(-s, s).toFixed(1)}px)`;
++                c.style.transform = t;
++                if (this.layer) this.layer.style.transform = t;
++            }
++        }
++    }
++
++    draw (layer) {
++        const ctx = layer.getContext('2d');
++        ctx.setTransform(1, 0, 0, 1, 0, 0);
++        ctx.clearRect(0, 0, layer.width, layer.height);
++        const k = layer.width / 480;
++        // stage coordinates: (0, 0) in the middle, y up
++        ctx.setTransform(k, 0, 0, -k, layer.width / 2, layer.height / 2);
++        for (const p of this.parts) {
++            const fade = p.shape === 'flash' ? 1 - (p.age / p.life) : Math.min(1, (1 - (p.age / p.life)) * 2.5);
++            ctx.globalAlpha = Math.max(0, p.alpha * fade);
++            ctx.fillStyle = p.color;
++            ctx.strokeStyle = p.color;
++            ctx.save();
++            ctx.translate(p.x, p.y);
++            ctx.rotate(p.rot);
++            const s = p.size;
++            if (p.shape === 'circle' || p.shape === 'flash') {
++                ctx.beginPath();
++                ctx.arc(0, 0, s, 0, Math.PI * 2);
++                ctx.fill();
++            } else if (p.shape === 'streak') {
++                ctx.lineWidth = s;
++                ctx.lineCap = 'round';
++                ctx.beginPath();
++                ctx.moveTo(0, 0);
++                ctx.lineTo(-p.vx * 0.03, -p.vy * 0.03);
++                ctx.stroke();
++            } else if (p.shape === 'rect') {
++                ctx.fillRect(-s, -s * 0.5, s * 2, s);
++            } else if (p.shape === 'leaf') {
++                ctx.beginPath();
++                ctx.ellipse(0, 0, s, s * 0.5, 0, 0, Math.PI * 2);
++                ctx.fill();
++            } else if (p.shape === 'heart') {
++                ctx.scale(1, -1);
++                ctx.beginPath();
++                ctx.moveTo(0, s * 0.35);
++                ctx.bezierCurveTo(-s * 1.2, -s * 0.6, -s * 0.4, -s * 1.2, 0, -s * 0.45);
++                ctx.bezierCurveTo(s * 0.4, -s * 1.2, s * 1.2, -s * 0.6, 0, s * 0.35);
++                ctx.fill();
++            } else if (p.shape === 'star') {
++                ctx.beginPath();
++                for (let i = 0; i < 10; i++) {
++                    const r = i % 2 ? s * 0.45 : s;
++                    const a = (i * Math.PI / 5) - (Math.PI / 2);
++                    ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
++                }
++                ctx.closePath();
++                ctx.fill();
++            }
++            ctx.restore();
++        }
++        ctx.globalAlpha = 1;
++    }
++}
++
++let effects = null;
++
++const installEffects = vm => {
++    if (effects) return effects;
++    effects = new Effects(vm);
++    for (const op of OPS) if (!compatBlocks.stacked.includes(op)) compatBlocks.stacked.push(op);
++    const P = vm.runtime._primitives;
++    const num = v => (Number.isFinite(Number(v)) ? Number(v) : 0);
++    P.looks_sleffecthere = (args, util) => effects.burst(String(args.EFFECT), util.target.x, util.target.y);
++    P.looks_sleffectat = args => effects.burst(String(args.EFFECT), num(args.X), num(args.Y));
++    P.looks_slweather = args => effects.setWeather(String(args.WEATHER));
++    P.looks_slweatherstop = () => effects.setWeather('none');
++    P.looks_slshake = args => effects.startShake(num(args.STRENGTH), num(args.SECS));
++    return effects;
++};
++
++export {installEffects};
 diff --git a/src/lib/sl-format.js b/src/lib/sl-format.js
 new file mode 100644
 index 0000000..e6b14ca
@@ -7159,12 +8231,285 @@ index 0000000..44cde6f
 +install();
 +
 +export default install;
+diff --git a/src/lib/sl-online/blocks.js b/src/lib/sl-online/blocks.js
+new file mode 100644
+index 0000000..493dd2d
+--- /dev/null
++++ b/src/lib/sl-online/blocks.js
+@@ -0,0 +1,45 @@
++// Stick Lab 1.5: the Online category.
++const COLOR = {primary: '#1E9C8A', secondary: '#1A8878', tertiary: '#156F62'};
++
++const defineOnlineBlocks = ScratchBlocks => {
++    if (!ScratchBlocks || ScratchBlocks.Blocks.sensing_slojoin) return;
++    const colours = {colour: COLOR.primary, colourSecondary: COLOR.secondary, colourTertiary: COLOR.tertiary};
++    const def = (opcode, message, args, extension) => {
++        ScratchBlocks.Blocks[opcode] = {
++            init: function () {
++                this.jsonInit(Object.assign({message0: message, args0: args || [], extensions: [extension]}, colours));
++            }
++        };
++    };
++    const text = name => ({type: 'input_value', name});
++    def('sensing_slojoin', 'join room %1', [text('ROOM')], 'shape_statement');
++    def('sensing_sloleave', 'leave room', [], 'shape_statement');
++    def('sensing_slosend', 'send %1 to everyone', [text('MESSAGE')], 'shape_statement');
++    def('event_slogetmessage', 'when I get a message', [], 'shape_hat');
++    def('sensing_slomessage', 'message', [], 'output_string');
++    def('sensing_slofrom', 'message from', [], 'output_number');
++    def('sensing_slomyid', 'my player id', [], 'output_number');
++    def('sensing_sloplayers', 'players online', [], 'output_number');
++    def('sensing_sloroom', 'room', [], 'output_string');
++    def('sensing_sloonline', 'online?', [], 'output_boolean');
++};
++
++const t = (name, value) => `<value name="${name}"><shadow type="text"><field name="TEXT">${value}</field></shadow></value>`;
++
++const onlineToolboxXML = () => `
++    <category name="Online" id="slonline" colour="${COLOR.primary}" secondaryColour="${COLOR.tertiary}">
++        <block type="sensing_slojoin">${t('ROOM', 'my-game')}</block>
++        <block type="sensing_sloleave"/>
++        <sep gap="36"/>
++        <block type="sensing_slosend">${t('MESSAGE', 'hello!')}</block>
++        <block type="event_slogetmessage"/>
++        <block type="sensing_slomessage"/>
++        <block type="sensing_slofrom"/>
++        <sep gap="36"/>
++        <block type="sensing_slomyid"/>
++        <block type="sensing_sloplayers"/>
++        <block type="sensing_sloroom"/>
++        <block type="sensing_sloonline"/>
++    </category>`;
++
++export {defineOnlineBlocks, onlineToolboxXML};
+diff --git a/src/lib/sl-online/online.js b/src/lib/sl-online/online.js
+new file mode 100644
+index 0000000..52a60e9
+--- /dev/null
++++ b/src/lib/sl-online/online.js
+@@ -0,0 +1,216 @@
++// Stick Lab 1.5: multiplayer blocks. Players in the same room can send each other short messages.
++//
++// It uses the free TurboWarp cloud variable server (the same one Stick Legions uses for online play),
++// so nothing needs to be set up. Cloud variables only hold numbers, so messages are written as digits:
++//   "1" + sender id (5 digits) + count (2 digits) + type (1 digit) + 2 digits per letter
++import compatBlocks from 'scratch-vm/src/compiler/compat-blocks';
++
++const DEFAULT_SERVER = 'wss://clouddata.turbowarp.org';
++const VAR = '☁ sticklab';
++const HAT = 'event_slogetmessage';
++const STACKED = ['sensing_slojoin', 'sensing_sloleave', 'sensing_slosend'];
++const INPUTS = ['sensing_slomessage', 'sensing_slofrom', 'sensing_slomyid', 'sensing_sloplayers', 'sensing_sloonline', 'sensing_sloroom'];
++const MAX_TEXT = 120;
++const HELLO_EVERY = 4000;
++const GONE_AFTER = 11000;
++const SEND_GAP = 110;
++
++const TYPE = {message: 1, hello: 2, bye: 3};
++
++const encode = (id, count, type, text) => {
++    let out = `1${String(id).padStart(5, '0')}${String(count % 100).padStart(2, '0')}${type}`;
++    for (const ch of String(text).slice(0, MAX_TEXT)) {
++        const c = ch.charCodeAt(0);
++        out += String((c >= 32 && c <= 126) ? c - 31 : 32).padStart(2, '0'); // other letters become "?"
++    }
++    return out;
++};
++
++const decode = value => {
++    const s = String(value);
++    if (!/^1\d{8}(\d\d)*$/.test(s)) return null;
++    let text = '';
++    for (let i = 9; i < s.length; i += 2) text += String.fromCharCode(parseInt(s.slice(i, i + 2), 10) + 31);
++    return {from: parseInt(s.slice(1, 6), 10), type: parseInt(s[8], 10), text};
++};
++
++const serverUrl = () => {
++    try {
++        return localStorage.getItem('sticklab-online-server') || DEFAULT_SERVER;
++    } catch (e) {
++        return DEFAULT_SERVER;
++    }
++};
++
++class Online {
++    constructor (vm) {
++        this.vm = vm;
++        this.runtime = vm.runtime;
++        this.myId = 10000 + Math.floor(Math.random() * 89999);
++        this.count = 0;
++        this.socket = null;
++        this.room = '';
++        this.connected = false;
++        this.players = new Map(); // id -> last seen time
++        this.inbox = [];
++        this.outbox = [];
++        this.current = {text: '', from: 0};
++        this.sendTimer = null;
++        this.helloTimer = null;
++        this.runtime.on('BEFORE_EXECUTE', () => this.deliver());
++        this.runtime.on('PROJECT_STOP_ALL', () => this.leave());
++    }
++
++    projectId (room) {
++        const clean = String(room).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'lobby';
++        return `stick-lab-room-${clean}`;
++    }
++
++    join (room) {
++        this.leave();
++        this.room = String(room);
++        const projectId = this.projectId(room);
++        const user = `player${this.myId}`;
++        return new Promise(resolve => {
++            let done = false;
++            const finish = () => {
++                if (!done) {
++                    done = true;
++                    resolve();
++                }
++            };
++            setTimeout(finish, 4000); // don't wait forever if the server can't be reached
++            let socket;
++            try {
++                socket = new WebSocket(serverUrl());
++            } catch (e) {
++                finish();
++                return;
++            }
++            this.socket = socket;
++            socket.onopen = () => {
++                socket.send(`${JSON.stringify({method: 'handshake', user, project_id: projectId})}\n`);
++                this.connected = true;
++                this.queue(TYPE.hello, '');
++                this.helloTimer = setInterval(() => this.queue(TYPE.hello, ''), HELLO_EVERY);
++                finish();
++            };
++            socket.onmessage = e => {
++                for (const line of String(e.data).split('\n')) {
++                    if (!line.trim()) continue;
++                    let msg;
++                    try {
++                        msg = JSON.parse(line);
++                    } catch (err) {
++                        continue;
++                    }
++                    if (msg.method !== 'set' || msg.name !== VAR) continue;
++                    const m = decode(msg.value);
++                    if (!m || m.from === this.myId) continue;
++                    if (m.type === TYPE.bye) {
++                        this.players.delete(m.from);
++                    } else {
++                        this.players.set(m.from, Date.now());
++                    }
++                    if (m.type === TYPE.message) this.inbox.push(m);
++                }
++            };
++            const closed = () => {
++                if (this.socket === socket) {
++                    this.connected = false;
++                    this.socket = null;
++                    clearInterval(this.helloTimer);
++                }
++                finish();
++            };
++            socket.onclose = closed;
++            socket.onerror = closed;
++        });
++    }
++
++    leave () {
++        if (this.socket) {
++            try {
++                if (this.connected) this.rawSend(encode(this.myId, this.count++, TYPE.bye, ''));
++                this.socket.close();
++            } catch (e) {
++                // already closed
++            }
++        }
++        clearInterval(this.helloTimer);
++        clearTimeout(this.sendTimer);
++        this.sendTimer = null;
++        this.socket = null;
++        this.connected = false;
++        this.players.clear();
++        this.inbox = [];
++        this.outbox = [];
++        this.room = '';
++    }
++
++    rawSend (value) {
++        this.socket.send(`${JSON.stringify({method: 'set', name: VAR, value})}\n`);
++    }
++
++    // messages go out one at a time, a little apart, so the server accepts them all
++    queue (type, text) {
++        if (!this.connected) return;
++        if (this.outbox.length > 40) this.outbox.shift();
++        this.outbox.push(encode(this.myId, this.count++, type, text));
++        this.pump();
++    }
++
++    pump () {
++        if (this.sendTimer || !this.outbox.length) return;
++        if (this.socket && this.connected) {
++            try {
++                this.rawSend(this.outbox.shift());
++            } catch (e) {
++                this.outbox = [];
++            }
++        }
++        this.sendTimer = setTimeout(() => {
++            this.sendTimer = null;
++            this.pump();
++        }, SEND_GAP);
++    }
++
++    // one message per frame, so every "when I get a message" script sees each message
++    deliver () {
++        if (!this.inbox.length) return;
++        this.current = this.inbox.shift();
++        this.runtime.startHats(HAT);
++    }
++
++    playersOnline () {
++        const now = Date.now();
++        for (const [id, seen] of this.players) if (now - seen > GONE_AFTER) this.players.delete(id);
++        return this.connected ? this.players.size + 1 : 0;
++    }
++}
++
++let online = null;
++
++const installOnline = vm => {
++    if (online || typeof WebSocket === 'undefined') return online;
++    online = new Online(vm);
++    vm.runtime._hats[HAT] = {restartExistingThreads: false};
++    for (const op of STACKED) if (!compatBlocks.stacked.includes(op)) compatBlocks.stacked.push(op);
++    for (const op of INPUTS) if (!compatBlocks.inputs.includes(op)) compatBlocks.inputs.push(op);
++    const P = vm.runtime._primitives;
++    P.sensing_slojoin = args => online.join(args.ROOM);
++    P.sensing_sloleave = () => online.leave();
++    P.sensing_slosend = (args, util) => {
++        util.runtime.requestRedraw(); // a loop with send runs once per frame
++        online.queue(TYPE.message, args.MESSAGE);
++    };
++    P.sensing_slomessage = () => online.current.text;
++    P.sensing_slofrom = () => online.current.from || '';
++    P.sensing_slomyid = () => online.myId;
++    P.sensing_sloplayers = () => online.playersOnline();
++    P.sensing_sloonline = () => online.connected;
++    P.sensing_sloroom = () => online.room;
++    return online;
++};
++
++export {installOnline, encode, decode};
 diff --git a/src/lib/sl-physics/blocks.js b/src/lib/sl-physics/blocks.js
 new file mode 100644
-index 0000000..f0d6789
+index 0000000..0e21b99
 --- /dev/null
 +++ b/src/lib/sl-physics/blocks.js
-@@ -0,0 +1,101 @@
+@@ -0,0 +1,131 @@
 +// Stick Lab 1.4: the Physics category's blocks.
 +const COLOR = {primary: '#8A6A3B', secondary: '#7A5D33', tertiary: '#644C2A'};
 +
@@ -7185,8 +8530,9 @@ index 0000000..f0d6789
 +        const options = withStage ? [['stage', '_stage_']] : [];
 +        const editing = vm.editingTarget;
 +        for (const t of vm.runtime.targets) {
-+            if (!t.isOriginal || t.isStage || t === editing) continue;
-+            options.push([t.getName(), t.getName()]);
++            if (!t.isOriginal || t.isStage) continue;
++            // your own sprite means "another clone of me"
++            options.push([t === editing ? `${t.getName()} (another clone)` : t.getName(), t.getName()]);
 +        }
 +        if (!options.length) options.push(['(no other sprite)', '_none_']);
 +        return options;
@@ -7220,6 +8566,31 @@ index 0000000..f0d6789
 +    joinBlock('motion_phys_rod', 'rod to', false);
 +    command('motion_phys_unjoin', 'remove joints');
 +    command('motion_phys_edges', 'stage edges %1', [menu('STATE', ['on', 'off'])]);
++    // the "when I hit" event
++    ScratchBlocks.Blocks.event_slwhenhit = {
++        init: function () {
++            const menu = function () {
++                const options = [['anything', '_any_'], ['the edge', '_edge_']];
++                for (const t of vm.runtime.targets) {
++                    if (t.isOriginal && !t.isStage) options.push([t.getName(), t.getName()]);
++                }
++                return options;
++            };
++            this.appendDummyInput().appendField('when I hit').appendField(new ScratchBlocks.FieldDropdown(menu), 'TARGET');
++            ScratchBlocks.Extensions.apply('shape_hat', this, false);
++            this.setColour(COLOR.primary, COLOR.secondary, COLOR.tertiary);
++        }
++    };
++    ScratchBlocks.Blocks.motion_phys_hitstrength = {
++        init: function () {
++            this.jsonInit(Object.assign({message0: 'hit strength', extensions: ['output_number']}, colours));
++        }
++    };
++    ScratchBlocks.Blocks.motion_phys_hitwhat = {
++        init: function () {
++            this.jsonInit(Object.assign({message0: 'what I hit', extensions: ['output_string']}, colours));
++        }
++    };
 +    ScratchBlocks.Blocks.motion_phys_get = {
 +        init: function () {
 +            this.jsonInit(Object.assign({message0: 'physics %1', args0: [menu('PROPERTY', ['velocity x', 'velocity y', 'speed', 'spin'])],
@@ -7262,16 +8633,20 @@ index 0000000..f0d6789
 +        ${isStage ? '' : `<sep gap="36"/>
 +        <block type="motion_phys_get"/>
 +        <block type="motion_phys_onground"/>
++        <sep gap="36"/>
++        <block type="event_slwhenhit"/>
++        <block type="motion_phys_hitstrength"/>
++        <block type="motion_phys_hitwhat"/>
 +        <block type="motion_phys_isphysical"/>`}
 +    </category>`;
 +
 +export {defineVmPhysicsBlocks, physicsToolboxXML};
 diff --git a/src/lib/sl-physics/physics.js b/src/lib/sl-physics/physics.js
 new file mode 100644
-index 0000000..580909f
+index 0000000..72ffdab
 --- /dev/null
 +++ b/src/lib/sl-physics/physics.js
-@@ -0,0 +1,317 @@
+@@ -0,0 +1,384 @@
 +// Stick Lab 1.4: Physics blocks. Sprites can become physical bodies in a Matter.js world.
 +//
 +// Stage coordinates are used everywhere (x right, y up). Matter.js uses y down, so y is flipped inside.
@@ -7279,14 +8654,16 @@ index 0000000..580909f
 +import Matter from 'matter-js';
 +import compatBlocks from 'scratch-vm/src/compiler/compat-blocks';
 +
-+const {Engine, Bodies, Body, Composite, Constraint} = Matter;
++const {Engine, Bodies, Body, Composite, Constraint, Events} = Matter;
++
++const HIT_HAT = 'event_slwhenhit';
 +
 +const STACKED = [
 +    'motion_phys_enable', 'motion_phys_disable', 'motion_phys_setgravity', 'motion_phys_push', 'motion_phys_setvelocity',
 +    'motion_phys_spin', 'motion_phys_motor', 'motion_phys_setproperty', 'motion_phys_pin', 'motion_phys_spring', 'motion_phys_rod',
 +    'motion_phys_unjoin', 'motion_phys_edges'
 +];
-+const INPUTS = ['motion_phys_get', 'motion_phys_onground', 'motion_phys_isphysical'];
++const INPUTS = ['motion_phys_get', 'motion_phys_onground', 'motion_phys_isphysical', 'motion_phys_hitstrength', 'motion_phys_hitwhat'];
 +
 +const toNum = v => {
 +    const n = Number(v);
@@ -7313,6 +8690,7 @@ index 0000000..580909f
 +        this.engine.positionIterations = 8;
 +        this.engine.velocityIterations = 6;
 +        this.setEdges(this.edgesOn);
++        Events.on(this.engine, 'collisionStart', e => this.onCollisions(e.pairs));
 +        return this.engine;
 +    }
 +
@@ -7395,10 +8773,63 @@ index 0000000..580909f
 +        return target ? this.items.get(target.id) : null;
 +    }
 +
++    // The sprite (or clone) to join to: the nearest physical copy of that sprite, not counting the sprite itself.
 +    findTarget (name, from) {
-+        if (name === '_stage_' || !name) return null;
-+        if (name === '_myself_') return from;
-+        return this.runtime.getSpriteTargetByName(String(name));
++        if (name === '_stage_' || !name || name === '_none_') return null;
++        if (name === '_myself_') name = from.sprite.name;
++        let best = null;
++        let bestD = Infinity;
++        for (const item of this.items.values()) {
++            const t = item.target;
++            if (t === from || t.sprite.name !== String(name)) continue;
++            const d = Math.hypot(t.x - from.x, t.y - from.y);
++            if (d < bestD) {
++                best = t;
++                bestD = d;
++            }
++        }
++        return best || this.runtime.getSpriteTargetByName(String(name));
++    }
++
++    // ------------------------------------------------------------------ hits
++
++    targetOfBody (body) {
++        const b = body.parent || body;
++        if (b.label === 'edge') return 'edge';
++        const item = this.items.get(b.label);
++        return item ? item.target : null;
++    }
++
++    onCollisions (pairs) {
++        for (const pair of pairs) {
++            const a = this.targetOfBody(pair.bodyA);
++            const b = this.targetOfBody(pair.bodyB);
++            const va = (pair.bodyA.parent || pair.bodyA).velocity;
++            const vb = (pair.bodyB.parent || pair.bodyB).velocity;
++            const strength = Math.round(Math.hypot(va.x - vb.x, va.y - vb.y) * 10) / 10;
++            if (strength < 0.3) continue;
++            if (a && a !== 'edge') this.hit(a, b, strength);
++            if (b && b !== 'edge') this.hit(b, a, strength);
++        }
++    }
++
++    hit (target, other, strength) {
++        const item = this.items.get(target.id);
++        if (!item) return;
++        const what = other === 'edge' ? 'edge' : (other ? other.sprite.name : '');
++        item.lastHit = {what, strength};
++        // start this sprite's "when I hit" scripts that match
++        this.runtime.allScriptsByOpcodeDo(HIT_HAT, (script, t) => {
++            if (t !== target) return;
++            // the runtime cache uppercases field values, so read the block itself
++            const block = t.blocks.getBlock(script.blockId);
++            const field = block && block.fields && block.fields.TARGET;
++            const want = field ? String(field.value) : '_any_';
++            if (want !== '_any_' && !(want === '_edge_' && what === 'edge') && want !== what) return;
++            const running = this.runtime.threads.some(th => th.target === target && th.topBlock === script.blockId &&
++                !th.stackClick && th.status !== 4);
++            if (!running) this.runtime._pushThread(script.blockId, target);
++        }, target);
 +    }
 +
 +    join (target, otherName, kind, stiffness) {
@@ -7514,6 +8945,9 @@ index 0000000..580909f
 +const installPhysics = vm => {
 +    if (world) return world;
 +    world = new PhysicsWorld(vm);
++    vm.runtime.slPhysics = world;
++    // "when I hit" is an event: scripts are started by the physics world, never by the block itself
++    vm.runtime._hats[HIT_HAT] = {restartExistingThreads: false};
 +    for (const op of STACKED) if (!compatBlocks.stacked.includes(op)) compatBlocks.stacked.push(op);
 +    for (const op of INPUTS) if (!compatBlocks.inputs.includes(op)) compatBlocks.inputs.push(op);
 +    const P = vm.runtime._primitives;
@@ -7584,6 +9018,14 @@ index 0000000..580909f
 +        return 0;
 +    };
 +    P.motion_phys_onground = (args, util) => world.onGround(util.target);
++    P.motion_phys_hitstrength = (args, util) => {
++        const item = world.item(util.target);
++        return item && item.lastHit ? item.lastHit.strength : 0;
++    };
++    P.motion_phys_hitwhat = (args, util) => {
++        const item = world.item(util.target);
++        return item && item.lastHit ? item.lastHit.what : '';
++    };
 +    P.motion_phys_isphysical = (args, util) => !!world.item(util.target);
 +    return world;
 +};
@@ -8031,10 +9473,10 @@ index 0000000..e48c765
 +export {installRagdoll};
 diff --git a/src/lib/sl-text-code/aliases.js b/src/lib/sl-text-code/aliases.js
 new file mode 100644
-index 0000000..d9ac887
+index 0000000..0684e97
 --- /dev/null
 +++ b/src/lib/sl-text-code/aliases.js
-@@ -0,0 +1,183 @@
+@@ -0,0 +1,206 @@
 +// Friendly Text coding names for common blocks. Any other block can still be written by its
 +// block id, for example sensing_dayssince2000().
 +const ALIASES = {
@@ -8059,6 +9501,29 @@ index 0000000..d9ac887
 +    physics: 'motion_phys_get',
 +    on_ground: 'motion_phys_onground',
 +    physics_on: 'motion_phys_isphysical',
++    when_i_hit: 'event_slwhenhit',
++    hit_strength: 'motion_phys_hitstrength',
++    what_i_hit: 'motion_phys_hitwhat',
++    // Effects
++    make_effect: 'looks_sleffecthere',
++    make_effect_at: 'looks_sleffectat',
++    start_weather: 'looks_slweather',
++    stop_weather: 'looks_slweatherstop',
++    shake_screen: 'looks_slshake',
++    // Touch controls
++    touch_controls: 'sensing_sltouch',
++    set_touch_button: 'sensing_sltouchkey',
++    // Online
++    join_room: 'sensing_slojoin',
++    leave_room: 'sensing_sloleave',
++    send_message: 'sensing_slosend',
++    when_i_get_message: 'event_slogetmessage',
++    message: 'sensing_slomessage',
++    message_from: 'sensing_slofrom',
++    my_player_id: 'sensing_slomyid',
++    players_online: 'sensing_sloplayers',
++    room: 'sensing_sloroom',
++    online: 'sensing_sloonline',
 +    turn_right: 'motion_turnright',
 +    turn_left: 'motion_turnleft',
 +    go_to: 'motion_goto',
@@ -9439,6 +10904,228 @@ index 0000000..614e8f2
 +    isVariableField,
 +    variableTypeOf
 +};
+diff --git a/src/lib/sl-touch/touch.js b/src/lib/sl-touch/touch.js
+new file mode 100644
+index 0000000..78acd48
+--- /dev/null
++++ b/src/lib/sl-touch/touch.js
+@@ -0,0 +1,216 @@
++// Stick Lab 1.5: on-screen touch controls for phones and tablets.
++// The joystick presses the arrow keys and the A / B buttons press keys (space and z at first),
++// so games made for the keyboard work on touch screens without changes.
++import compatBlocks from 'scratch-vm/src/compiler/compat-blocks';
++
++const OPS = ['sensing_sltouch', 'sensing_sltouchkey'];
++const KEY_NAMES = {
++    'space': ' ', 'up arrow': 'ArrowUp', 'down arrow': 'ArrowDown', 'left arrow': 'ArrowLeft', 'right arrow': 'ArrowRight',
++    'enter': 'Enter'
++};
++
++const isTouchDevice = () => typeof window !== 'undefined' &&
++    (('ontouchstart' in window) || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches));
++
++const CSS = `
++.sl-touch { position: absolute; z-index: 20; pointer-events: none; user-select: none; -webkit-user-select: none; touch-action: none; }
++.sl-touch-stick, .sl-touch-btn { position: absolute; pointer-events: auto; touch-action: none; border-radius: 50%;
++  border: 2px solid rgba(255, 255, 255, 0.85); box-shadow: 0 3px 10px rgba(10, 40, 90, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.7); }
++.sl-touch-stick { background: radial-gradient(circle at 50% 40%, rgba(160, 200, 240, 0.45), rgba(30, 80, 150, 0.35)); }
++.sl-touch-knob { position: absolute; left: 50%; top: 50%; width: 46%; height: 46%; margin: -23% 0 0 -23%; border-radius: 50%;
++  background: linear-gradient(180deg, #a6d4fa 0%, #5ea6e8 48%, #2a6ab8 52%, #3a87d6 100%); border: 2px solid rgba(255, 255, 255, 0.9);
++  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35); }
++.sl-touch-btn { display: flex; align-items: center; justify-content: center; color: #fff;
++  font: bold 20px "Trebuchet MS", "Segoe UI", sans-serif; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
++  background: linear-gradient(180deg, rgba(166, 230, 154, 0.85) 0%, rgba(92, 193, 79, 0.85) 48%, rgba(47, 154, 42, 0.85) 52%, rgba(70, 181, 61, 0.85) 100%); }
++.sl-touch-btn.b { background: linear-gradient(180deg, rgba(255, 200, 150, 0.85) 0%, rgba(240, 140, 70, 0.85) 48%, rgba(210, 90, 30, 0.85) 52%, rgba(230, 120, 50, 0.85) 100%); }
++.sl-touch-btn.down { filter: brightness(0.8); transform: scale(0.94); }
++`;
++
++class TouchControls {
++    constructor (vm) {
++        this.vm = vm;
++        this.runtime = vm.runtime;
++        this.mode = 'auto';
++        this.keys = {A: ' ', B: 'z'};
++        this.down = new Set();
++        this.root = null;
++        this.stickId = null;
++        this.vm.runtime.on('PROJECT_STOP_ALL', () => this.releaseAll());
++        this.vm.runtime.on('PROJECT_LOADED', () => {
++            this.mode = 'auto';
++            this.keys = {A: ' ', B: 'z'};
++            this.update();
++        });
++        setInterval(() => this.update(), 500);
++    }
++
++    wanted () {
++        return this.mode === 'on' || (this.mode === 'auto' && isTouchDevice());
++    }
++
++    press (key, isDown) {
++        if (isDown === this.down.has(key)) return;
++        if (isDown) this.down.add(key);
++        else this.down.delete(key);
++        this.vm.postIOData('keyboard', {key, isDown});
++    }
++
++    releaseAll () {
++        for (const key of Array.from(this.down)) this.press(key, false);
++        if (this.knob) this.knob.style.transform = '';
++    }
++
++    build (parent) {
++        if (!document.getElementById('sl-touch-css')) {
++            const style = document.createElement('style');
++            style.id = 'sl-touch-css';
++            style.textContent = CSS;
++            document.head.appendChild(style);
++        }
++        const root = document.createElement('div');
++        root.className = 'sl-touch';
++        const stick = document.createElement('div');
++        stick.className = 'sl-touch-stick';
++        const knob = document.createElement('div');
++        knob.className = 'sl-touch-knob';
++        stick.appendChild(knob);
++        root.appendChild(stick);
++        const makeButton = (name, cls) => {
++            const b = document.createElement('div');
++            b.className = `sl-touch-btn ${cls}`;
++            b.textContent = name;
++            const on = e => {
++                e.preventDefault();
++                b.setPointerCapture(e.pointerId);
++                b.classList.add('down');
++                this.press(this.keys[name], true);
++            };
++            const off = e => {
++                e.preventDefault();
++                b.classList.remove('down');
++                this.press(this.keys[name], false);
++            };
++            b.addEventListener('pointerdown', on);
++            b.addEventListener('pointerup', off);
++            b.addEventListener('pointercancel', off);
++            root.appendChild(b);
++            return b;
++        };
++        this.btnA = makeButton('A', 'a');
++        this.btnB = makeButton('B', 'b');
++        // the joystick
++        const moveStick = e => {
++            const box = stick.getBoundingClientRect();
++            const r = box.width / 2;
++            let dx = (e.clientX - (box.left + r)) / r;
++            let dy = (e.clientY - (box.top + r)) / r;
++            const len = Math.hypot(dx, dy);
++            if (len > 1) {
++                dx /= len;
++                dy /= len;
++            }
++            knob.style.transform = `translate(${dx * r * 0.55}px, ${dy * r * 0.55}px)`;
++            const dead = 0.35;
++            this.press('ArrowLeft', dx < -dead);
++            this.press('ArrowRight', dx > dead);
++            this.press('ArrowUp', dy < -dead);
++            this.press('ArrowDown', dy > dead);
++        };
++        stick.addEventListener('pointerdown', e => {
++            e.preventDefault();
++            stick.setPointerCapture(e.pointerId);
++            this.stickId = e.pointerId;
++            moveStick(e);
++        });
++        stick.addEventListener('pointermove', e => {
++            if (e.pointerId === this.stickId) moveStick(e);
++        });
++        const stopStick = e => {
++            if (e.pointerId !== this.stickId) return;
++            this.stickId = null;
++            knob.style.transform = '';
++            ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].forEach(k => this.press(k, false));
++        };
++        stick.addEventListener('pointerup', stopStick);
++        stick.addEventListener('pointercancel', stopStick);
++        this.stick = stick;
++        this.knob = knob;
++        parent.appendChild(root);
++        return root;
++    }
++
++    // keep the controls on top of the stage, sized to it
++    update () {
++        const canvas = this.runtime.renderer && this.runtime.renderer.canvas;
++        if (!this.wanted() || !canvas || !canvas.parentElement || canvas.clientWidth < 100) {
++            if (this.root) {
++                this.releaseAll();
++                this.root.remove();
++                this.root = null;
++            }
++            return;
++        }
++        if (!this.root || this.root.parentElement !== canvas.parentElement) {
++            if (this.root) this.root.remove();
++            this.root = this.build(canvas.parentElement);
++        }
++        const w = canvas.clientWidth;
++        const h = canvas.clientHeight;
++        Object.assign(this.root.style, {left: `${canvas.offsetLeft}px`, top: `${canvas.offsetTop}px`, width: `${w}px`, height: `${h}px`});
++        const size = Math.max(70, Math.min(150, w * 0.2));
++        const pad = size * 0.18;
++        Object.assign(this.stick.style, {width: `${size}px`, height: `${size}px`, left: `${pad}px`, bottom: `${pad}px`});
++        const bs = size * 0.48;
++        Object.assign(this.btnA.style, {width: `${bs}px`, height: `${bs}px`, right: `${pad}px`, bottom: `${pad + (bs * 0.25)}px`,
++            fontSize: `${bs * 0.42}px`});
++        Object.assign(this.btnB.style, {width: `${bs}px`, height: `${bs}px`, right: `${pad + (bs * 1.15)}px`, bottom: `${pad + (bs * 0.95)}px`,
++            fontSize: `${bs * 0.42}px`});
++    }
++}
++
++let controls = null;
++
++const installTouch = vm => {
++    if (controls || typeof document === 'undefined') return controls;
++    controls = new TouchControls(vm);
++    for (const op of OPS) if (!compatBlocks.stacked.includes(op)) compatBlocks.stacked.push(op);
++    const P = vm.runtime._primitives;
++    P.sensing_sltouch = args => {
++        controls.mode = ['on', 'off', 'auto'].includes(String(args.MODE)) ? String(args.MODE) : 'auto';
++        controls.update();
++    };
++    P.sensing_sltouchkey = args => {
++        const button = String(args.BUTTON) === 'B' ? 'B' : 'A';
++        const name = String(args.KEY);
++        const key = KEY_NAMES[name] || name.slice(0, 1);
++        controls.press(controls.keys[button], false);
++        controls.keys[button] = key;
++    };
++    return controls;
++};
++
++const touchBlocks = ScratchBlocks => {
++    if (!ScratchBlocks || ScratchBlocks.Blocks.sensing_sltouch) return;
++    const menu = (name, options) => ({type: 'field_dropdown', name, options: options.map(o => [o, o])});
++    ScratchBlocks.Blocks.sensing_sltouch = {
++        init: function () {
++            this.jsonInit({message0: 'touch controls %1', args0: [menu('MODE', ['auto', 'on', 'off'])],
++                category: ScratchBlocks.Categories.sensing, extensions: ['colours_sensing', 'shape_statement']});
++            this.setTooltip('A joystick (arrow keys) and A / B buttons on the stage. Auto shows them on phones and tablets.');
++        }
++    };
++    ScratchBlocks.Blocks.sensing_sltouchkey = {
++        init: function () {
++            this.jsonInit({message0: 'set touch button %1 to key %2',
++                args0: [menu('BUTTON', ['A', 'B']), menu('KEY', ['space', 'z', 'x', 'up arrow', 'enter', 'a', 'b', 'f', 'j'])],
++                category: ScratchBlocks.Categories.sensing, extensions: ['colours_sensing', 'shape_statement']});
++        }
++    };
++};
++
++const touchToolboxXML = `
++        <block type="sensing_sltouch"/>
++        <block type="sensing_sltouchkey"/>`;
++
++export {installTouch, touchBlocks, touchToolboxXML};
 diff --git a/src/lib/sl-workspace-registry.js b/src/lib/sl-workspace-registry.js
 new file mode 100644
 index 0000000..019d8f1
@@ -9743,24 +11430,30 @@ index 8f417c7..2d5dcda 100644
          id: 'tw.guiDefaultTitle'
      }
 diff --git a/src/reducers/vm.js b/src/reducers/vm.js
-index 2951caf..ca3a069 100644
+index 2951caf..bcaea03 100644
 --- a/src/reducers/vm.js
 +++ b/src/reducers/vm.js
-@@ -1,4 +1,8 @@
+@@ -1,4 +1,11 @@
  import VM from 'scratch-vm';
 +import {installStickLabLoader} from '../lib/sl-format';
 +installStickLabLoader(VM);
 +import {installRagdoll} from '../lib/sl-ragdoll/ragdoll';
 +import {installPhysics} from '../lib/sl-physics/physics';
++import {installEffects} from '../lib/sl-effects/effects';
++import {installTouch} from '../lib/sl-touch/touch';
++import {installOnline} from '../lib/sl-online/online';
  import storage from '../lib/storage';
  import {MAXIMUM_CLOUD_VARIABLES} from '../lib/tw-cloud-limits';
  
-@@ -7,6 +11,8 @@ const defaultVM = new VM();
+@@ -7,6 +14,11 @@ const defaultVM = new VM();
  defaultVM.setCompatibilityMode(true);
  defaultVM.runtime.cloudOptions.limit = MAXIMUM_CLOUD_VARIABLES;
  defaultVM.attachStorage(storage);
 +installRagdoll(defaultVM);
 +installPhysics(defaultVM);
++installEffects(defaultVM);
++installTouch(defaultVM);
++installOnline(defaultVM);
  const initialState = defaultVM;
  
  const reducer = function (state, action) {
