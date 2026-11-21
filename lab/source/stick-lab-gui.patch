@@ -196,7 +196,7 @@ index 444e77c..854e772 100644
 +    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
 +}
 diff --git a/src/components/menu-bar/menu-bar.jsx b/src/components/menu-bar/menu-bar.jsx
-index 6caddb5..0892b5a 100644
+index 6caddb5..41f4ecf 100644
 --- a/src/components/menu-bar/menu-bar.jsx
 +++ b/src/components/menu-bar/menu-bar.jsx
 @@ -96,6 +96,9 @@ import editIcon from './icon--edit.svg';
@@ -226,7 +226,7 @@ index 6caddb5..0892b5a 100644
 +                                draggable={false}
 +                                src={stickLabLogo}
 +                            />
-+                            <span className={styles.stickLabName}>{'Stick Lab'}<span className={styles.stickLabVersion}>{' 1.3'}</span></span>
++                            <span className={styles.stickLabName}>{'Stick Lab'}<span className={styles.stickLabVersion}>{' 1.3.1'}</span></span>
 +                        </a>
 +                        <button
 +                            className={classNames(styles.menuBarItem, styles.hoverable, styles.duoButton)}
@@ -5346,10 +5346,18 @@ index 0000000..b28bce4
 +    font-weight: bold;
 +}
 diff --git a/src/containers/blocks.jsx b/src/containers/blocks.jsx
-index 1a93708..2b08868 100644
+index 1a93708..6b4cd0f 100644
 --- a/src/containers/blocks.jsx
 +++ b/src/containers/blocks.jsx
-@@ -44,6 +44,7 @@ import AddonHooks from '../addons/hooks.js';
+@@ -6,6 +6,7 @@ import PropTypes from 'prop-types';
+ import React from 'react';
+ import {intlShape, injectIntl, defineMessages} from 'react-intl';
+ import VMScratchBlocks from '../lib/blocks';
++import {defineRagdollBlocks} from '../lib/sl-ragdoll/blocks';
+ import VM from 'scratch-vm';
+ 
+ import log from '../lib/log.js';
+@@ -44,6 +45,7 @@ import AddonHooks from '../addons/hooks.js';
  import LoadScratchBlocksHOC from '../lib/tw-load-scratch-blocks-hoc.jsx';
  import {findTopBlock} from '../lib/backpack/code-payload.js';
  import {gentlyRequestPersistentStorage} from '../lib/tw-persistent-storage.js';
@@ -5357,7 +5365,23 @@ index 1a93708..2b08868 100644
  
  // TW: Strings we add to scratch-blocks are localized here
  const messages = defineMessages({
-@@ -166,6 +167,7 @@ class Blocks extends React.Component {
+@@ -90,6 +92,7 @@ class Blocks extends React.Component {
+     constructor (props) {
+         super(props);
+         this.ScratchBlocks = VMScratchBlocks(props.vm, false);
++        defineRagdollBlocks(this.ScratchBlocks);
+ 
+         window.ScratchBlocks = this.ScratchBlocks;
+         AddonHooks.blockly = this.ScratchBlocks;
+@@ -136,6 +139,7 @@ class Blocks extends React.Component {
+     }
+     componentDidMount () {
+         this.ScratchBlocks = VMScratchBlocks(this.props.vm, this.props.useCatBlocks);
++        defineRagdollBlocks(this.ScratchBlocks);
+         this.ScratchBlocks.prompt = this.handlePromptStart;
+         this.ScratchBlocks.statusButtonCallback = this.handleConnectionModalStart;
+         this.ScratchBlocks.recordSoundCallback = this.handleOpenSoundRecorder;
+@@ -166,6 +170,7 @@ class Blocks extends React.Component {
          );
          this.workspace = this.ScratchBlocks.inject(this.blocks, workspaceConfig);
          AddonHooks.blocklyWorkspace = this.workspace;
@@ -5365,7 +5389,7 @@ index 1a93708..2b08868 100644
  
          // Register buttons under new callback keys for creating variables,
          // lists, and procedures from extensions.
-@@ -287,6 +289,7 @@ class Blocks extends React.Component {
+@@ -287,6 +292,7 @@ class Blocks extends React.Component {
      componentWillUnmount () {
          this.detachVM();
          this.unmounted = true;
@@ -5775,6 +5799,31 @@ diff --git a/src/lib/default-project/stickman.svg b/src/lib/default-project/stic
 new file mode 100644
 index 0000000..fa22f48
 Binary files /dev/null and b/src/lib/default-project/stickman.svg differ
+diff --git a/src/lib/make-toolbox-xml.js b/src/lib/make-toolbox-xml.js
+index 679cac0..fec9034 100644
+--- a/src/lib/make-toolbox-xml.js
++++ b/src/lib/make-toolbox-xml.js
+@@ -140,6 +140,20 @@ const motion = function (isInitialSetup, isStage, targetId, colors) {
+         ${blockSeparator}
+         <block type="motion_setrotationstyle"/>
+         ${blockSeparator}
++        <block type="motion_ragdoll"/>
++        <block type="motion_ragdollthrow">
++            <value name="X">
++                <shadow type="math_number">
++                    <field name="NUM">10</field>
++                </shadow>
++            </value>
++            <value name="Y">
++                <shadow type="math_number">
++                    <field name="NUM">15</field>
++                </shadow>
++            </value>
++        </block>
++        ${blockSeparator}
+         <block id="${targetId}_xposition" type="motion_xposition"/>
+         <block id="${targetId}_yposition" type="motion_yposition"/>
+         <block id="${targetId}_direction" type="motion_direction"/>`}
 diff --git a/src/lib/sb-file-uploader-hoc.jsx b/src/lib/sb-file-uploader-hoc.jsx
 index 01f29db..a866883 100644
 --- a/src/lib/sb-file-uploader-hoc.jsx
@@ -6682,17 +6731,449 @@ index 0000000..9838674
 +    playUrl,
 +    publishProject
 +};
+diff --git a/src/lib/sl-ragdoll/blocks.js b/src/lib/sl-ragdoll/blocks.js
+new file mode 100644
+index 0000000..0997cd4
+--- /dev/null
++++ b/src/lib/sl-ragdoll/blocks.js
+@@ -0,0 +1,34 @@
++// Stick Lab 1.3.1: the ragdoll blocks in the Motion category.
++const defineRagdollBlocks = ScratchBlocks => {
++    if (!ScratchBlocks || ScratchBlocks.Blocks.motion_ragdoll) return;
++    ScratchBlocks.Blocks.motion_ragdoll = {
++        init: function () {
++            this.jsonInit({
++                message0: 'ragdoll %1 %2',
++                args0: [
++                    {type: 'field_dropdown', name: 'STATE', options: [['on', 'on'], ['off', 'off']]},
++                    {type: 'field_dropdown', name: 'PIVOT', options: [['use pivot', 'use pivot'], ['no pivot', 'no pivot']]}
++                ],
++                category: ScratchBlocks.Categories.motion,
++                extensions: ['colours_motion', 'shape_statement']
++            });
++            this.setTooltip('Use pivot: a floppy stickman with joints. No pivot: the whole sprite falls, bounces and tumbles. ' +
++                'Grab a ragdoll with the mouse to throw it.');
++        }
++    };
++    ScratchBlocks.Blocks.motion_ragdollthrow = {
++        init: function () {
++            this.jsonInit({
++                message0: 'throw ragdoll x: %1 y: %2',
++                args0: [
++                    {type: 'input_value', name: 'X'},
++                    {type: 'input_value', name: 'Y'}
++                ],
++                category: ScratchBlocks.Categories.motion,
++                extensions: ['colours_motion', 'shape_statement']
++            });
++        }
++    };
++};
++
++export {defineRagdollBlocks};
+diff --git a/src/lib/sl-ragdoll/ragdoll.js b/src/lib/sl-ragdoll/ragdoll.js
+new file mode 100644
+index 0000000..a0e7490
+--- /dev/null
++++ b/src/lib/sl-ragdoll/ragdoll.js
+@@ -0,0 +1,384 @@
++// Stick Lab 1.3.1: ragdoll physics for sprites.
++//
++//   ragdoll [on/off] [use pivot / no pivot]
++//     no pivot:  the sprite is one stiff body. It falls, bounces, tumbles and can be thrown.
++//     use pivot: the sprite becomes a floppy stickman with joints (head, arms, legs swing on their own).
++//   throw ragdoll x: () y: ()
++//
++// While a sprite is a ragdoll you can grab it with the mouse and fling it.
++import compatBlocks from 'scratch-vm/src/compiler/compat-blocks';
++
++const OPCODES = ['motion_ragdoll', 'motion_ragdollthrow'];
++
++const STAGE = {left: -240, right: 240, top: 180, bottom: -180};
++const GRAVITY = 0.9; // per frame at 30 fps
++const RES = 2; // pivot stickmen are drawn at 2x
++
++// The stickman for "use pivot": points (x, y up) for a 60-unit-tall stickman, and the bones between them.
++const POINTS = {
++    head: [0, 26], neck: [0, 17], hip: [0, -4],
++    elbowL: [-8, 9], handL: [-14, 0], elbowR: [8, 9], handR: [14, 0],
++    kneeL: [-5, -17], footL: [-7, -30], kneeR: [5, -17], footR: [7, -30]
++};
++const BONES = [
++    ['head', 'neck'], ['neck', 'hip'],
++    ['neck', 'elbowL'], ['elbowL', 'handL'], ['neck', 'elbowR'], ['elbowR', 'handR'],
++    ['hip', 'kneeL'], ['kneeL', 'footL'], ['hip', 'kneeR'], ['kneeR', 'footR']
++];
++// Hidden braces that stop the body folding in impossible ways.
++const BRACES = [['head', 'hip', 0.9], ['kneeL', 'kneeR', 0.25], ['elbowL', 'hip', 0.15], ['elbowR', 'hip', 0.15]];
++
++const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
++
++// The main colour of a costume, so the pivot stickman matches the sprite.
++const costumeColor = target => {
++    try {
++        const costume = target.getCostumes()[target.currentCostume];
++        if (costume && costume.dataFormat === 'svg' && costume.asset) {
++            const text = new TextDecoder().decode(costume.asset.data);
++            const counts = {};
++            const re = /#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/g;
++            let m;
++            while ((m = re.exec(text))) {
++                let hex = m[1].toLowerCase();
++                if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
++                const r = parseInt(hex.slice(0, 2), 16);
++                const g = parseInt(hex.slice(2, 4), 16);
++                const b = parseInt(hex.slice(4, 6), 16);
++                if (r + g + b > 690) continue; // skip white
++                counts[hex] = (counts[hex] || 0) + 1;
++            }
++            const best = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
++            if (best) return `#${best}`;
++        }
++    } catch (e) {
++        // fall through
++    }
++    return '#1e5aa8';
++};
++
++class RagdollWorld {
++    constructor (vm) {
++        this.vm = vm;
++        this.runtime = vm.runtime;
++        this.dolls = new Map(); // target id -> state
++        this.mouseWasDown = false;
++        this.step = this.step.bind(this);
++        this.runtime.on('BEFORE_EXECUTE', this.step);
++        this.runtime.on('PROJECT_STOP_ALL', () => this.stopAll());
++        this.runtime.on('PROJECT_LOADED', () => this.stopAll());
++    }
++
++    get frameScale () {
++        const fps = (this.runtime.frameLoop && this.runtime.frameLoop.framerate) || 30;
++        return fps > 0 ? 30 / fps : 1; // keep the same speed at 30 or 60 fps
++    }
++
++    set (target, on, pivot) {
++        if (!target || target.isStage) return;
++        const old = this.dolls.get(target.id);
++        if (!on) {
++            if (old) this.release(target, old);
++            return;
++        }
++        if (old && old.pivot === pivot) return;
++        if (old) this.release(target, old);
++        const state = pivot ? this.makeStickman(target) : {pivot: false, vx: 0, vy: 0, va: 0};
++        state.lastX = target.x;
++        state.lastY = target.y;
++        this.dolls.set(target.id, state);
++    }
++
++    makeStickman (target) {
++        const bounds = target.getBounds();
++        const height = bounds ? clamp(bounds.top - bounds.bottom, 24, 300) : 60;
++        const s = height / 60;
++        const p = {};
++        for (const [name, [x, y]] of Object.entries(POINTS)) {
++            const px = target.x + (x * s);
++            const py = target.y + (y * s);
++            p[name] = {x: px, y: py, ox: px, oy: py};
++        }
++        const length = (a, b) => Math.hypot(p[a].x - p[b].x, p[a].y - p[b].y);
++        const canvas = document.createElement('canvas');
++        canvas.reusable = false;
++        return {
++            pivot: true, s, p,
++            bones: BONES.map(([a, b]) => [a, b, length(a, b), 1]),
++            braces: BRACES.map(([a, b, k]) => [a, b, length(a, b), k]),
++            color: costumeColor(target),
++            canvas,
++            skinId: null,
++            grab: null
++        };
++    }
++
++    release (target, state) {
++        this.dolls.delete(target.id);
++        if (state.pivot) {
++            if (state.skinId !== null && this.runtime.renderer) {
++                this.runtime.renderer.destroySkin(state.skinId);
++            }
++            if (target.renderer) target.updateAllDrawableProperties();
++        }
++    }
++
++    stopAll () {
++        for (const [id, state] of this.dolls) {
++            const target = this.runtime.getTargetById(id);
++            if (target) this.release(target, state);
++            else this.dolls.delete(id);
++        }
++    }
++
++    throw (target, vx, vy) {
++        const state = target && this.dolls.get(target.id);
++        if (!state) return;
++        vx = clamp(Number(vx) || 0, -80, 80);
++        vy = clamp(Number(vy) || 0, -80, 80);
++        if (state.pivot) {
++            for (const q of Object.values(state.p)) {
++                q.ox = q.x - vx;
++                q.oy = q.y - vy;
++            }
++            // a little spin so it tumbles
++            state.p.head.ox += vy * 0.3;
++            state.p.footL.ox -= vy * 0.3;
++        } else {
++            state.vx = vx;
++            state.vy = vy;
++            state.va = vx * 1.5;
++        }
++    }
++
++    // ------------------------------------------------------------------ every frame
++
++    step () {
++        if (!this.dolls.size) return;
++        const mouse = this.runtime.ioDevices.mouse;
++        const mx = mouse.getScratchX();
++        const my = mouse.getScratchY();
++        const down = mouse.getIsDown();
++        const pressed = down && !this.mouseWasDown;
++        this.mouseWasDown = down;
++        const k = this.frameScale;
++        for (const [id, state] of this.dolls) {
++            const target = this.runtime.getTargetById(id);
++            if (!target) {
++                this.dolls.delete(id);
++                continue;
++            }
++            // a script moved the sprite: move the ragdoll with it
++            const dx = target.x - state.lastX;
++            const dy = target.y - state.lastY;
++            if (state.pivot) {
++                if (dx || dy) for (const q of Object.values(state.p)) {
++                    q.x += dx; q.y += dy; q.ox += dx; q.oy += dy;
++                }
++                this.stepStickman(target, state, {mx, my, down, pressed, k});
++            } else {
++                this.stepRigid(target, state, {mx, my, down, pressed, k});
++            }
++        }
++    }
++
++    stepRigid (target, state, {mx, my, down, pressed, k}) {
++        if (pressed && target.visible && target.isTouchingObject('_mouse_')) {
++            state.grab = {ox: target.x - mx, oy: target.y - my, lx: mx, ly: my};
++        }
++        if (state.grab && !down) state.grab = null;
++        let x = target.x;
++        let y = target.y;
++        if (state.grab) {
++            const g = state.grab;
++            state.vx = (mx - g.lx);
++            state.vy = (my - g.ly);
++            state.va = state.vx * 1.2;
++            g.lx = mx;
++            g.ly = my;
++            x = mx + g.ox;
++            y = my + g.oy;
++            target.setDirection(target.direction + (state.va * 0.3));
++        } else {
++            state.vy -= GRAVITY * k;
++            x += state.vx * k;
++            y += state.vy * k;
++            target.setDirection(target.direction + (state.va * k));
++        }
++        target.setXY(x, y);
++        const b = target.getBounds();
++        if (b && !state.grab) {
++            let fx = 0;
++            let fy = 0;
++            if (b.bottom < STAGE.bottom) {
++                fy = STAGE.bottom - b.bottom;
++                if (state.vy < 0) {
++                    state.vy = Math.abs(state.vy) < 2.5 ? 0 : -state.vy * 0.45;
++                    state.va = (state.va * 0.5) + (state.vx * 0.6);
++                    state.vx *= 0.82;
++                }
++                if (state.vy === 0) {
++                    state.vx *= 0.85;
++                    state.va *= 0.7;
++                }
++            }
++            if (b.top > STAGE.top && state.vy > 0) {
++                fy = STAGE.top - b.top;
++                state.vy = -state.vy * 0.4;
++            }
++            if (b.left < STAGE.left && state.vx < 0) {
++                fx = STAGE.left - b.left;
++                state.vx = -state.vx * 0.55;
++                state.va = -state.va * 0.6;
++            }
++            if (b.right > STAGE.right && state.vx > 0) {
++                fx = STAGE.right - b.right;
++                state.vx = -state.vx * 0.55;
++                state.va = -state.va * 0.6;
++            }
++            if (fx || fy) target.setXY(target.x + fx, target.y + fy);
++        }
++        state.lastX = target.x;
++        state.lastY = target.y;
++    }
++
++    stepStickman (target, state, {mx, my, down, pressed, k}) {
++        const p = state.p;
++        const pts = Object.values(p);
++        const headR = 6.5 * state.s;
++        if (pressed && target.visible) {
++            let best = null;
++            let bestD = Math.max(14, 14 * state.s);
++            for (const [name, q] of Object.entries(p)) {
++                const d = Math.hypot(q.x - mx, q.y - my);
++                if (d < bestD) {
++                    best = name;
++                    bestD = d;
++                }
++            }
++            if (best) state.grab = best;
++        }
++        if (state.grab && !down) state.grab = null;
++
++        // move every point (Verlet), with gravity
++        for (const q of pts) {
++            const vx = (q.x - q.ox) * 0.99;
++            const vy = (q.y - q.oy) * 0.99;
++            q.ox = q.x;
++            q.oy = q.y;
++            q.x += vx;
++            q.y += vy - (GRAVITY * k * 0.55);
++        }
++        if (state.grab) {
++            const q = p[state.grab];
++            q.x = mx;
++            q.y = my;
++        }
++        // keep the bones the right length
++        for (let i = 0; i < 8; i++) {
++            for (const [a, b, len, stiff] of state.bones.concat(state.braces)) {
++                const A = p[a];
++                const B = p[b];
++                const dx = B.x - A.x;
++                const dy = B.y - A.y;
++                const d = Math.hypot(dx, dy) || 0.001;
++                const diff = ((d - len) / d) * 0.5 * stiff;
++                const grabA = state.grab === a;
++                const grabB = state.grab === b;
++                if (!grabA) {
++                    A.x += dx * diff * (grabB ? 2 : 1);
++                    A.y += dy * diff * (grabB ? 2 : 1);
++                }
++                if (!grabB) {
++                    B.x -= dx * diff * (grabA ? 2 : 1);
++                    B.y -= dy * diff * (grabA ? 2 : 1);
++                }
++            }
++            // the stage edges
++            for (const [name, q] of Object.entries(p)) {
++                const r = name === 'head' ? headR : 2 * state.s;
++                if (q.y < STAGE.bottom + r) {
++                    q.y = STAGE.bottom + r;
++                    q.ox = q.x - ((q.x - q.ox) * 0.75); // friction on the ground
++                    if (q.oy < q.y) q.oy = q.y + ((q.y - q.oy) * 0.3);
++                }
++                if (q.y > STAGE.top - r) q.y = STAGE.top - r;
++                if (q.x < STAGE.left + r) q.x = STAGE.left + r;
++                if (q.x > STAGE.right - r) q.x = STAGE.right - r;
++            }
++        }
++        this.drawStickman(target, state, headR);
++    }
++
++    drawStickman (target, state, headR) {
++        const renderer = this.runtime.renderer;
++        if (!renderer || target.drawableID === null || typeof target.drawableID === 'undefined') return;
++        const p = state.p;
++        const line = 4.2 * state.s;
++        const pad = headR + line + 2;
++        let minX = Infinity;
++        let maxX = -Infinity;
++        let minY = Infinity;
++        let maxY = -Infinity;
++        for (const q of Object.values(p)) {
++            minX = Math.min(minX, q.x);
++            maxX = Math.max(maxX, q.x);
++            minY = Math.min(minY, q.y);
++            maxY = Math.max(maxY, q.y);
++        }
++        minX -= pad; maxX += pad; minY -= pad; maxY += pad;
++        const canvas = state.canvas;
++        canvas.width = Math.ceil((maxX - minX) * RES);
++        canvas.height = Math.ceil((maxY - minY) * RES);
++        const ctx = canvas.getContext('2d');
++        const X = q => (q.x - minX) * RES;
++        const Y = q => (maxY - q.y) * RES;
++        ctx.strokeStyle = state.color;
++        ctx.fillStyle = state.color;
++        ctx.lineWidth = line * RES;
++        ctx.lineCap = 'round';
++        ctx.lineJoin = 'round';
++        ctx.beginPath();
++        for (const [a, b] of state.bones) {
++            if (a === 'head') continue;
++            ctx.moveTo(X(p[a]), Y(p[a]));
++            ctx.lineTo(X(p[b]), Y(p[b]));
++        }
++        ctx.stroke();
++        ctx.beginPath();
++        ctx.arc(X(p.head), Y(p.head), headR * RES, 0, Math.PI * 2);
++        ctx.fill();
++        // the sprite's position is the hip
++        const center = [p.hip.x - minX, maxY - p.hip.y];
++        if (state.skinId === null) state.skinId = renderer.createBitmapSkin(canvas, RES, center);
++        else renderer.updateBitmapSkin(state.skinId, canvas, RES, center);
++        renderer.updateDrawableSkinId(target.drawableID, state.skinId);
++        renderer.updateDrawableDirectionScale(target.drawableID, 90, [100, 100]);
++        target.setXY(p.hip.x, p.hip.y, true);
++        renderer.updateDrawablePosition(target.drawableID, [p.hip.x, p.hip.y]);
++        state.lastX = target.x;
++        state.lastY = target.y;
++    }
++}
++
++let world = null;
++
++const installRagdoll = vm => {
++    if (world) return world;
++    world = new RagdollWorld(vm);
++    for (const opcode of OPCODES) {
++        if (!compatBlocks.stacked.includes(opcode)) compatBlocks.stacked.push(opcode);
++    }
++    vm.runtime._primitives.motion_ragdoll = (args, util) => {
++        const on = String(args.STATE).toLowerCase() !== 'off';
++        const value = String(args.PIVOT).toLowerCase();
++        const pivot = value === 'pivot' || value === 'use pivot';
++        world.set(util.target, on, pivot);
++    };
++    vm.runtime._primitives.motion_ragdollthrow = (args, util) => {
++        world.throw(util.target, args.X, args.Y);
++    };
++    return world;
++};
++
++export {installRagdoll};
 diff --git a/src/lib/sl-text-code/aliases.js b/src/lib/sl-text-code/aliases.js
 new file mode 100644
-index 0000000..96aefa7
+index 0000000..e21eec4
 --- /dev/null
 +++ b/src/lib/sl-text-code/aliases.js
-@@ -0,0 +1,164 @@
+@@ -0,0 +1,166 @@
 +// Friendly Text coding names for common blocks. Any other block can still be written by its
 +// block id, for example sensing_dayssince2000().
 +const ALIASES = {
 +    // Motion
 +    move: 'motion_movesteps',
++    ragdoll: 'motion_ragdoll',
++    throw_ragdoll: 'motion_ragdollthrow',
 +    turn_right: 'motion_turnright',
 +    turn_left: 'motion_turnleft',
 +    go_to: 'motion_goto',
@@ -8377,16 +8858,25 @@ index 8f417c7..2d5dcda 100644
          id: 'tw.guiDefaultTitle'
      }
 diff --git a/src/reducers/vm.js b/src/reducers/vm.js
-index 2951caf..11d78a2 100644
+index 2951caf..c5d9dda 100644
 --- a/src/reducers/vm.js
 +++ b/src/reducers/vm.js
-@@ -1,4 +1,6 @@
+@@ -1,4 +1,7 @@
  import VM from 'scratch-vm';
 +import {installStickLabLoader} from '../lib/sl-format';
 +installStickLabLoader(VM);
++import {installRagdoll} from '../lib/sl-ragdoll/ragdoll';
  import storage from '../lib/storage';
  import {MAXIMUM_CLOUD_VARIABLES} from '../lib/tw-cloud-limits';
  
+@@ -7,6 +10,7 @@ const defaultVM = new VM();
+ defaultVM.setCompatibilityMode(true);
+ defaultVM.runtime.cloudOptions.limit = MAXIMUM_CLOUD_VARIABLES;
+ defaultVM.attachStorage(storage);
++installRagdoll(defaultVM);
+ const initialState = defaultVM;
+ 
+ const reducer = function (state, action) {
 diff --git a/static/duo-config.json b/static/duo-config.json
 new file mode 100644
 index 0000000..e6c3abe
