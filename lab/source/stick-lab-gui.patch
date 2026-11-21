@@ -1984,10 +1984,10 @@ index 0000000..3332f3f
 +}
 diff --git a/src/components/sl-duo/duo-panel.jsx b/src/components/sl-duo/duo-panel.jsx
 new file mode 100644
-index 0000000..5aa53bd
+index 0000000..e9978d2
 --- /dev/null
 +++ b/src/components/sl-duo/duo-panel.jsx
-@@ -0,0 +1,586 @@
+@@ -0,0 +1,583 @@
 +import React from 'react';
 +import PropTypes from 'prop-types';
 +import {connect} from 'react-redux';
@@ -2456,19 +2456,16 @@ index 0000000..5aa53bd
 +                                value={settings.apiKey}
 +                                onChange={e => this.updateSetting('apiKey', e.target.value.trim())} // eslint-disable-line react/jsx-no-bind
 +                            />
-+                        ) : (
-+                            <React.Fragment>
-+                                <div className={styles.fieldLabel}>{'Owner pass (only for the owner\'s device)'}</div>
-+                                <input
-+                                    autoComplete="off"
-+                                    className={styles.field}
-+                                    placeholder="Leave empty"
-+                                    type="password"
-+                                    value={settings.ownerPass}
-+                                    onChange={e => this.updateSetting('ownerPass', e.target.value)} // eslint-disable-line react/jsx-no-bind
-+                                />
-+                            </React.Fragment>
-+                        )}
++                        ) : null}
++                        <div className={styles.fieldLabel}>{'Owner pass (only for the site owner\'s devices)'}</div>
++                        <input
++                            autoComplete="off"
++                            className={styles.field}
++                            placeholder="Leave empty"
++                            type="password"
++                            value={settings.ownerPass}
++                            onChange={e => this.updateSetting('ownerPass', e.target.value)} // eslint-disable-line react/jsx-no-bind
++                        />
 +                        <label className={styles.radio}>
 +                            <input
 +                                checked={settings.seeCode}
