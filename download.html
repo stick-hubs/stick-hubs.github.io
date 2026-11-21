@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Download Stick Lab · Stick Hubs</title>
+<meta name="description" content="Download Stick Lab for Windows and Mac.">
+<link rel="icon" href="lab/favicon.ico">
+<link rel="stylesheet" href="classic.css">
+<style>
+body { margin: 0; background: linear-gradient(180deg, #cfe3fa, #eef5fd 300px); font-family: Verdana, Tahoma, "Segoe UI", sans-serif; color: #1f3550; }
+.box { max-width: 560px; margin: 60px auto; background: #fff; border: 1px solid #9db4cf; border-radius: 6px; box-shadow: 0 6px 24px rgba(30, 60, 110, .15); overflow: hidden; }
+.top { padding: 12px 18px; color: #fff; font: bold 18px "Trebuchet MS", Verdana, sans-serif; text-shadow: 0 1px 1px rgba(0,0,0,.3);
+  background: linear-gradient(180deg, #a3d2f7 0%, #62a7e8 46%, #2a6ab8 50%, #3283d6 100%); }
+.in { padding: 20px 18px 22px; }
+.bar { height: 22px; border: 1px solid #8ea4c1; border-radius: 4px; background: #eef3f9; overflow: hidden; margin: 14px 0 8px; }
+.fill { height: 100%; width: 0; background: linear-gradient(180deg, #8fe08a, #3fae3a 50%, #2f9a2b 51%, #57c552); transition: width .2s; }
+.small { font-size: 13px; color: #555; }
+.err { color: #b3261e; }
+</style>
+</head>
+<body>
+<div class="box"><div class="top">Download Stick Lab 1.5</div><div class="in">
+  <p id="what">Getting ready...</p>
+  <div class="bar"><div class="fill" id="fill"></div></div>
+  <p class="small" id="status"></p>
+  <div class="btns"><a class="btn play" id="save" hidden>Save again</a> <a class="btn ghost" href="stick-lab.html">Back to Stick Lab</a></div>
+  <p class="small" id="help" hidden></p>
+</div></div>
+<script>
+(function () {
+  var NAMES = {'windows': 'Windows', 'mac-arm64': 'Mac (Apple chip)', 'mac-x64': 'Mac (Intel)'};
+  var HELP = {
+    'windows': 'Open <b>Stick_Lab-windows.exe</b> from your Downloads. No install needed. If Windows says it protected your PC, click <b>More info</b>, then <b>Run anyway</b>.',
+    'mac-arm64': 'Open the zip in your Downloads, drag <b>Stick Lab</b> to Applications, then right-click it and choose <b>Open</b> the first time.',
+    'mac-x64': 'Open the zip in your Downloads, drag <b>Stick Lab</b> to Applications, then right-click it and choose <b>Open</b> the first time.'
+  };
+  var base = 'downloads/stick-lab-1.5/';
+  var key = new URLSearchParams(location.search).get('file');
+  var $ = function (id) { return document.getElementById(id); };
+  var mb = function (n) { return (n / 1048576).toFixed(0) + ' MB'; };
+  if (!NAMES[key]) { $('what').innerHTML = 'Pick a download on the <a href="stick-lab.html">Stick Lab page</a>.'; return; }
+  $('what').textContent = 'Downloading Stick Lab for ' + NAMES[key] + '. Keep this page open.';
+  fetch(base + 'files.json', {cache: 'no-store'}).then(function (r) { return r.json(); }).then(function (all) {
+    var f = all[key], got = 0, chunks = [];
+    var next = function (i) {
+      if (i >= f.parts.length) return Promise.resolve();
+      return fetch(base + f.parts[i]).then(function (r) {
+        if (!r.ok) throw new Error('part ' + (i + 1) + ' returned ' + r.status);
+        var reader = r.body.getReader(), pieces = [];
+        var pump = function () {
+          return reader.read().then(function (res) {
+            if (res.done) { chunks.push(new Blob(pieces)); return; }
+            pieces.push(res.value); got += res.value.length;
+            $('fill').style.width = (got / f.size * 100).toFixed(1) + '%';
+            $('status').textContent = mb(got) + ' of ' + mb(f.size);
+            return pump();
+          });
+        };
+        return pump();
+      }).then(function () { return next(i + 1); });
+    };
+    return next(0).then(function () {
+      var blob = new Blob(chunks, {type: 'application/octet-stream'});
+      if (blob.size !== f.size) throw new Error('the download was incomplete');
+      var url = URL.createObjectURL(blob);
+      var a = $('save'); a.href = url; a.download = f.name; a.hidden = false;
+      a.click();
+      $('what').textContent = 'Done! Stick Lab for ' + NAMES[key] + ' is in your Downloads.';
+      $('status').textContent = f.name + ' · ' + mb(f.size) + '. Nothing saved? Press Save again.';
+      $('help').innerHTML = HELP[key]; $('help').hidden = false;
+    });
+  }).catch(function (e) {
+    $('status').innerHTML = '<span class="err">The download stopped (' + e.message + '). Check your internet and refresh this page to try again.</span>';
+  });
+})();
+</script>
+</body>
+</html>
