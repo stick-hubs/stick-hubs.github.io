@@ -10906,7 +10906,7 @@ index 0000000..614e8f2
 +};
 diff --git a/src/lib/sl-touch/touch.js b/src/lib/sl-touch/touch.js
 new file mode 100644
-index 0000000..78acd48
+index 0000000..184f2f8
 --- /dev/null
 +++ b/src/lib/sl-touch/touch.js
 @@ -0,0 +1,216 @@
@@ -10943,14 +10943,14 @@ index 0000000..78acd48
 +    constructor (vm) {
 +        this.vm = vm;
 +        this.runtime = vm.runtime;
-+        this.mode = 'auto';
++        this.mode = 'off'; // only a project's "touch controls" block turns them on
 +        this.keys = {A: ' ', B: 'z'};
 +        this.down = new Set();
 +        this.root = null;
 +        this.stickId = null;
 +        this.vm.runtime.on('PROJECT_STOP_ALL', () => this.releaseAll());
 +        this.vm.runtime.on('PROJECT_LOADED', () => {
-+            this.mode = 'auto';
++            this.mode = 'off';
 +            this.keys = {A: ' ', B: 'z'};
 +            this.update();
 +        });
