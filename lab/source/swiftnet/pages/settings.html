@@ -1,0 +1,46 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Settings</title><link rel="stylesheet" href="swiftnet://settings/page.css"></head>
+<body><div class="top"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="#fff" fill-opacity=".25"/><circle cx="16" cy="16" r="12" fill="#2a8fd8"/><path d="M5 19 C 11 13, 18 12, 28 9 C 21 14, 16 18, 9 26 C 10 22, 9 20, 5 19 Z" fill="#fff"/></svg><h1>Settings</h1></div>
+<main>
+<h2>Appearance</h2>
+<div class="card">
+  <div class="row"><div class="grow">Theme<div class="sub">How SwiftNet looks</div></div><select id="theme"><option value="aero">Windows 7 Aero</option><option value="modern">Modern</option></select></div>
+  <div class="row"><div class="grow">Show bookmarks bar</div><input type="checkbox" id="bookmarksBar"></div>
+</div>
+<h2>Search and start</h2>
+<div class="card">
+  <div class="row"><div class="grow">Search engine<div class="sub">Used when you type in the address bar</div></div><select id="search"></select></div>
+  <div class="row"><div class="grow">Home page<div class="sub">Opens on start, with the home button and in new tabs</div></div><input type="text" id="home"><button class="btn" id="homeReset">Stick Hubs</button></div>
+  <div class="row"><div class="grow">When SwiftNet starts</div><select id="startup"><option value="home">Open the home page</option><option value="restore">Continue where I left off</option></select></div>
+</div>
+<h2>Privacy</h2>
+<div class="card">
+  <div class="row"><div class="grow">Clear browsing data<div class="sub">
+    <label class="radio"><input type="checkbox" id="c-history" checked> History</label>
+    <label class="radio"><input type="checkbox" id="c-cache" checked> Saved images and files (cache)</label>
+    <label class="radio"><input type="checkbox" id="c-cookies"> Cookies and site data (signs you out of websites)</label></div></div><button class="btn" id="clear">Clear data</button></div>
+</div>
+<h2>About SwiftNet</h2>
+<div class="card">
+  <div class="row"><div class="grow"><b>SwiftNet</b> <span id="ver"></span><div class="sub" id="engine"></div><div class="sub">Made by Stick Manx for Stick Hubs.</div></div><button class="btn primary" id="check">Check for updates</button></div>
+  <div class="row"><div class="grow sub" id="upd">SwiftNet checks for new versions by itself every few hours.</div></div>
+</div>
+</main>
+<script>
+function esc(s){return String(s==null?"":s).replace(/[&<>"\x27]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","\x27":"&#39;"}[c]})}
+sn.get("settings").then(function(r){document.body.classList.toggle("modern",r.settings.theme==="modern")});
+</script>
+<script>
+var $=function(id){return document.getElementById(id)};
+function set(key,value){return sn.set("setting",{key:key,value:value}).then(function(){document.body.classList.toggle("modern",$("theme").value==="modern")})}
+sn.get("settings").then(function(r){var s=r.settings;
+  $("theme").value=s.theme;$("bookmarksBar").checked=s.bookmarksBar;$("startup").value=s.startup;$("home").value=s.home;
+  $("search").innerHTML=Object.keys(r.search).map(function(k){return '<option value="'+k+'">'+esc(r.search[k])+'</option>'}).join("");$("search").value=s.search;
+  $("ver").textContent="version "+r.version;$("engine").textContent="Chromium "+r.chrome+" (Electron "+r.electron+")";
+  $("homeReset").onclick=function(){$("home").value=r.home;set("home",r.home)}});
+["theme","search","startup"].forEach(function(id){$(id).addEventListener("change",function(){set(id,this.value)})});
+$("bookmarksBar").addEventListener("change",function(){set("bookmarksBar",this.checked)});
+$("home").addEventListener("change",function(){set("home",this.value)});
+$("clear").addEventListener("click",function(){sn.set("clearData",{history:$("c-history").checked,cache:$("c-cache").checked,cookies:$("c-cookies").checked}).then(function(){$("clear").textContent="Cleared!";setTimeout(function(){$("clear").textContent="Clear data"},1600)})});
+$("check").addEventListener("click",function(){$("upd").textContent="Checking...";sn.get("update").then(function(r){
+  $("upd").innerHTML=r.update?'SwiftNet '+esc(r.update.version)+' is out! <a href="https://stick-hubs.github.io/store.html#swiftnet">Download it from the Stick Hubs Web Store</a>.':'You have the newest SwiftNet ('+esc(r.version)+').'})});
+</script></body></html>

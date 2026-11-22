@@ -1,0 +1,19 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Downloads</title><link rel="stylesheet" href="swiftnet://downloads/page.css"></head>
+<body><div class="top"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="#fff" fill-opacity=".25"/><circle cx="16" cy="16" r="12" fill="#2a8fd8"/><path d="M5 19 C 11 13, 18 12, 28 9 C 21 14, 16 18, 9 26 C 10 22, 9 20, 5 19 Z" fill="#fff"/></svg><h1>Downloads</h1></div>
+<main><div style="display:flex;justify-content:flex-end"><button class="btn" id="clear">Clear list</button></div><div class="card" id="list" style="margin-top:10px"></div><p class="note">Files are saved in your Downloads folder.</p></main>
+<script>
+function esc(s){return String(s==null?"":s).replace(/[&<>"\x27]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","\x27":"&#39;"}[c]})}
+sn.get("settings").then(function(r){document.body.classList.toggle("modern",r.settings.theme==="modern")});
+</script>
+<script>
+function size(n){if(!n)return"0 B";var u=["B","KB","MB","GB"];var i=Math.min(3,Math.floor(Math.log(n)/Math.log(1024)));return(n/Math.pow(1024,i)).toFixed(i?1:0)+" "+u[i]}
+function load(){sn.get("downloads").then(function(list){var box=document.getElementById("list");
+  if(!list.length){box.innerHTML='<div class="empty">Nothing downloaded yet.</div>';return}
+  box.innerHTML=list.map(function(d){var pct=d.total?Math.round(100*d.received/d.total):0;
+    var st=d.state==="completed"?size(d.received):d.state==="cancelled"?"Cancelled":d.state==="interrupted"?"Failed":size(d.received)+(d.total?" of "+size(d.total):"");
+    var act=d.state==="completed"?'<button class="btn" data-a="open" data-id="'+d.id+'">Open</button><button class="btn" data-a="show" data-id="'+d.id+'">Show in folder</button>':d.state==="progressing"?'<button class="btn" data-a="cancel" data-id="'+d.id+'">Cancel</button>':"";
+    return '<div class="row"><div class="grow"><div class="title">'+esc(d.name)+'</div><div class="url">'+esc(d.url)+'</div><div class="sub">'+st+'</div>'+(d.state==="progressing"?'<div class="bar"><i style="width:'+pct+'%"></i></div>':"")+'</div>'+act+'</div>'}).join("")})}
+document.getElementById("list").addEventListener("click",function(e){var b=e.target.closest("[data-a]");if(b)sn.set("download",{id:+b.dataset.id,action:b.dataset.a}).then(load)});
+document.getElementById("clear").addEventListener("click",function(){sn.set("download",{action:"clear"}).then(load)});
+sn.onChanged(load);load();
+</script></body></html>

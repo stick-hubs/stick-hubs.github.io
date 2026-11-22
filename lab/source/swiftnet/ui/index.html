@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src * data: blob:; style-src 'self' 'unsafe-inline'">
+<title>SwiftNet</title>
+<link rel="stylesheet" href="ui.css">
+</head>
+<body class="aero">
+<div id="chrome">
+  <div id="titlebar">
+    <div id="mac-space"></div>
+    <div id="logo" title="SwiftNet"><svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7fd0ff"/><stop offset="1" stop-color="#1565c0"/></linearGradient></defs><circle cx="16" cy="16" r="14" fill="url(#lg)"/><path d="M5 19 C 11 13, 18 12, 28 9 C 21 14, 16 18, 9 26 C 10 22, 9 20, 5 19 Z" fill="#fff"/><path d="M4 12 H11 M3 16 H9" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".8"/></svg></div>
+    <div id="tabs" role="tablist"></div>
+    <button id="newtab" class="nodrag" title="New tab (Ctrl+T)" aria-label="New tab"><svg viewBox="0 0 16 16"><path d="M8 3 V13 M3 8 H13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+    <div class="drag"></div>
+    <div id="caption">
+      <button data-cmd="min" title="Minimize" aria-label="Minimize"><svg viewBox="0 0 10 10"><path d="M1 7 H9" stroke="currentColor" stroke-width="1.4"/></svg></button>
+      <button data-cmd="max" title="Maximize" aria-label="Maximize"><svg viewBox="0 0 10 10"><rect x="1.2" y="1.2" width="7.6" height="7.6" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></button>
+      <button data-cmd="close" class="close" title="Close" aria-label="Close"><svg viewBox="0 0 10 10"><path d="M1.5 1.5 L8.5 8.5 M8.5 1.5 L1.5 8.5" stroke="currentColor" stroke-width="1.5"/></svg></button>
+    </div>
+  </div>
+  <div id="toolbar">
+    <button id="back" class="nav big" data-cmd="back" title="Back (Alt+Left)" aria-label="Back"><svg viewBox="0 0 20 20"><path d="M12 4 L6 10 L12 16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button id="forward" class="nav" data-cmd="forward" title="Forward (Alt+Right)" aria-label="Forward"><svg viewBox="0 0 20 20"><path d="M8 4 L14 10 L8 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button id="reload" class="tool" data-cmd="reload" title="Reload (F5)" aria-label="Reload"><svg class="i-reload" viewBox="0 0 20 20"><path d="M15.5 10 A5.5 5.5 0 1 1 13.9 6.1 M14.5 2.8 V6.6 H10.7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><svg class="i-stop" viewBox="0 0 20 20"><path d="M5 5 L15 15 M15 5 L5 15" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>
+    <button id="home" class="tool" data-cmd="home" title="Stick Hubs home (Alt+Home)" aria-label="Home"><svg viewBox="0 0 20 20"><path d="M3 9.5 L10 3.5 L17 9.5 M5 8 V16.5 H15 V8" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg></button>
+    <div id="omnibox">
+      <span id="security" title=""></span>
+      <input id="address" spellcheck="false" autocomplete="off" aria-label="Address and search bar">
+      <button id="zoom" data-cmd="zoomReset" title="Reset zoom" hidden></button>
+      <button id="star" data-cmd="bookmark" title="Bookmark this page (Ctrl+D)" aria-label="Bookmark this page"><svg viewBox="0 0 20 20"><path d="M10 2.8 L12.2 7.4 L17.2 8 L13.5 11.4 L14.5 16.4 L10 13.9 L5.5 16.4 L6.5 11.4 L2.8 8 L7.8 7.4 Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></button>
+    </div>
+    <button id="update" class="pill" data-cmd="update" hidden></button>
+    <button id="claude" class="tool" data-cmd="claude" title="Claude panel" aria-label="Claude panel"><svg viewBox="0 0 20 20"><path d="M10 2 L11.6 8.4 L18 10 L11.6 11.6 L10 18 L8.4 11.6 L2 10 L8.4 8.4 Z" fill="currentColor"/></svg><span>Claude</span></button>
+    <button id="menu" class="tool" title="Menu" aria-label="Menu"><svg viewBox="0 0 20 20"><path d="M4 6 H16 M4 10 H16 M4 14 H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+  </div>
+  <div id="bookmarks" hidden></div>
+  <div id="findbar" hidden>
+    <input id="findtext" placeholder="Find on page" spellcheck="false" aria-label="Find on page">
+    <span id="findcount"></span>
+    <button id="findprev" title="Previous (Shift+Enter)" aria-label="Previous match"><svg viewBox="0 0 16 16"><path d="M4 10 L8 6 L12 10" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button>
+    <button id="findnext" title="Next (Enter)" aria-label="Next match"><svg viewBox="0 0 16 16"><path d="M4 6 L8 10 L12 6" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button>
+    <button id="findclose" title="Close (Esc)" aria-label="Close find bar"><svg viewBox="0 0 16 16"><path d="M4 4 L12 12 M12 4 L4 12" stroke="currentColor" stroke-width="1.8"/></svg></button>
+  </div>
+</div>
+<div id="downloads" hidden></div>
+<script src="ui.js"></script>
+</body>
+</html>

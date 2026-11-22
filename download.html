@@ -35,12 +35,27 @@ body { margin: 0; background: linear-gradient(180deg, #cfe3fa, #eef5fd 300px); f
     'mac-arm64': 'Open the zip in your Downloads, drag <b>Stick Lab</b> to Applications, then right-click it and choose <b>Open</b> the first time.',
     'mac-x64': 'Open the zip in your Downloads, drag <b>Stick Lab</b> to Applications, then right-click it and choose <b>Open</b> the first time.'
   };
-  var base = 'downloads/stick-lab-1.5/';
-  var key = new URLSearchParams(location.search).get('file');
+  var params = new URLSearchParams(location.search);
+  var isSN = params.get('app') === 'swiftnet';
+  var APP = isSN ? 'SwiftNet' : 'Stick Lab';
+  var base = isSN ? 'downloads/swiftnet-1.0/' : 'downloads/stick-lab-1.5/';
+  var key = params.get('file');
+  if (isSN) {
+    HELP = {
+      'windows': 'Open <b>SwiftNet-windows.exe</b> from your Downloads. No install needed. If Windows says it protected your PC, click <b>More info</b>, then <b>Run anyway</b>.',
+      'mac-arm64': 'Open the zip in your Downloads, drag <b>SwiftNet</b> to Applications, then right-click it and choose <b>Open</b> the first time.',
+      'mac-x64': 'Open the zip in your Downloads, drag <b>SwiftNet</b> to Applications, then right-click it and choose <b>Open</b> the first time.'
+    };
+    document.title = 'Download SwiftNet · Stick Hubs';
+    document.querySelector('.top').textContent = 'Download SwiftNet 1.0';
+    document.querySelector('a.btn.ghost').href = 'store.html#swiftnet';
+    document.querySelector('a.btn.ghost').textContent = 'Back to the Web Store';
+  }
   var $ = function (id) { return document.getElementById(id); };
   var mb = function (n) { return (n / 1048576).toFixed(0) + ' MB'; };
-  if (!NAMES[key]) { $('what').innerHTML = 'Pick a download on the <a href="stick-lab.html">Stick Lab page</a>.'; return; }
-  $('what').textContent = 'Downloading Stick Lab for ' + NAMES[key] + '. Keep this page open.';
+  if (isSN && key === 'mac-x64') key = '';
+  if (!NAMES[key]) { $('what').innerHTML = 'Pick a download in the <a href="store.html">Web Store</a>.'; return; }
+  $('what').textContent = 'Downloading ' + APP + ' for ' + NAMES[key] + '. Keep this page open.';
   fetch(base + 'files.json', {cache: 'no-store'}).then(function (r) { return r.json(); }).then(function (all) {
     var f = all[key], got = 0, chunks = [];
     var next = function (i) {
@@ -66,7 +81,7 @@ body { margin: 0; background: linear-gradient(180deg, #cfe3fa, #eef5fd 300px); f
       var url = URL.createObjectURL(blob);
       var a = $('save'); a.href = url; a.download = f.name; a.hidden = false;
       a.click();
-      $('what').textContent = 'Done! Stick Lab for ' + NAMES[key] + ' is in your Downloads.';
+      $('what').textContent = 'Done! ' + APP + ' for ' + NAMES[key] + ' is in your Downloads.';
       $('status').textContent = f.name + ' · ' + mb(f.size) + '. Nothing saved? Press Save again.';
       $('help').innerHTML = HELP[key]; $('help').hidden = false;
     });

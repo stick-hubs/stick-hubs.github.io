@@ -1,0 +1,20 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Bookmarks</title><link rel="stylesheet" href="swiftnet://bookmarks/page.css"></head>
+<body><div class="top"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="#fff" fill-opacity=".25"/><circle cx="16" cy="16" r="12" fill="#2a8fd8"/><path d="M5 19 C 11 13, 18 12, 28 9 C 21 14, 16 18, 9 26 C 10 22, 9 20, 5 19 Z" fill="#fff"/></svg><h1>Bookmarks</h1></div>
+<main><p class="note">Tip: press the star in the address bar (or Ctrl+D) to bookmark a page. Bookmarks show on the bookmarks bar under the address bar.</p><div class="card" id="list"></div></main>
+<script>
+function esc(s){return String(s==null?"":s).replace(/[&<>"\x27]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","\x27":"&#39;"}[c]})}
+sn.get("settings").then(function(r){document.body.classList.toggle("modern",r.settings.theme==="modern")});
+</script>
+<script>
+var list=[];
+function render(){var box=document.getElementById("list");
+  if(!list.length){box.innerHTML='<div class="empty">No bookmarks yet.</div>';return}
+  box.innerHTML=list.map(function(b,i){return '<div class="row"><a class="grow" href="'+esc(b.url)+'"><div class="title">'+esc(b.title)+'</div><div class="url">'+esc(b.url)+'</div></a>'+
+    '<button class="icon-btn" data-up="'+i+'" title="Move up"'+(i?'':' disabled')+'>&#9650;</button><button class="icon-btn" data-rn="'+i+'" title="Rename">&#9998;</button><button class="icon-btn" data-rm="'+i+'" title="Remove">&#10005;</button></div>'}).join("")}
+function save(){sn.set("bookmarks",list).then(render)}
+document.getElementById("list").addEventListener("click",function(e){var b=e.target.closest("button");if(!b)return;
+  if(b.dataset.rm){list.splice(+b.dataset.rm,1);save()}
+  else if(b.dataset.up){var i=+b.dataset.up;var t=list[i];list[i]=list[i-1];list[i-1]=t;save()}
+  else if(b.dataset.rn){var n=prompt("Bookmark name:",list[+b.dataset.rn].title);if(n){list[+b.dataset.rn].title=n;save()}}});
+sn.get("bookmarks").then(function(b){list=b;render()});
+</script></body></html>

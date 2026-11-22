@@ -1,0 +1,24 @@
+{
+ "windows": {
+  "name": "SwiftNet-windows.exe",
+  "size": 109533070,
+  "sha256": "903f44ef2f4e3359c202a2ab5afe4e35f3679ab8f4b72e136295b1046d70cf2a",
+  "parts": [
+   "SwiftNet-windows.exe.part1",
+   "SwiftNet-windows.exe.part2",
+   "SwiftNet-windows.exe.part3"
+  ],
+  "version": "1.0.0"
+ },
+ "mac-arm64": {
+  "name": "SwiftNet-mac-arm64.zip",
+  "size": 118055956,
+  "sha256": "63db87290b2cbd01052c63251895b9fa5c3545cd2664ba8947e5d15b3e8da6da",
+  "parts": [
+   "SwiftNet-mac-arm64.zip.part1",
+   "SwiftNet-mac-arm64.zip.part2",
+   "SwiftNet-mac-arm64.zip.part3"
+  ],
+  "version": "1.0.0"
+ }
+}

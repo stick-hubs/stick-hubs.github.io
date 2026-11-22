@@ -1,0 +1,55 @@
+{
+  "name": "swiftnet",
+  "productName": "SwiftNet",
+  "version": "1.0.0",
+  "description": "SwiftNet: a fast Chromium web browser from Stick Hubs.",
+  "author": "Stick Manx (akami)",
+  "homepage": "https://stick-hubs.github.io/store.html",
+  "license": "MIT",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac"
+  },
+  "build": {
+    "appId": "io.github.stick-hubs.swiftnet",
+    "productName": "SwiftNet",
+    "copyright": "Stick Manx",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**",
+      "ui/**",
+      "pages/**",
+      "package.json"
+    ],
+    "asar": true,
+    "protocols": [
+      {
+        "name": "Web page",
+        "schemes": ["http", "https"]
+      }
+    ],
+    "win": {
+      "target": [{"target": "portable", "arch": ["x64"]}],
+      "icon": "build/icon.ico"
+    },
+    "portable": {
+      "artifactName": "SwiftNet-windows.exe"
+    },
+    "mac": {
+      "target": [{"target": "zip", "arch": ["x64", "arm64"]}],
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png",
+      "artifactName": "SwiftNet-mac-${arch}.zip",
+      "identity": null
+    }
+  },
+  "devDependencies": {
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0"
+  }
+}
