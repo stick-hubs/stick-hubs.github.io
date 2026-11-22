@@ -80,7 +80,7 @@
   function renderChip() {
     var side = document.querySelector('.sm-side');
     if (!side) return;
-    var chip = side.querySelector('.sm-account');
+    var chip = side.querySelector('.sm-account:not(.sm-friends)');
     if (!chip) {
       chip = document.createElement('a');
       chip.className = 'sm-account';
@@ -104,6 +104,40 @@
       chip.title = 'Sign in with GitHub';
     }
     chip.hidden = false;
+    renderFriends(!!profile);
+  }
+
+  // A "Friends" button next to the account button, with a red badge for new messages and requests.
+  var friendsOn = true, badgeTimer = null;
+  function renderFriends(signedIn) {
+    var side = document.querySelector('.sm-side');
+    if (!side) return;
+    var link = side.querySelector('.sm-friends');
+    if (!signedIn || !friendsOn) { if (link) link.remove(); clearInterval(badgeTimer); badgeTimer = null; return; }
+    if (!link) {
+      link = document.createElement('a');
+      link.className = 'sm-account sm-friends';
+      link.href = 'friends.html';
+      link.title = 'Friends and chat';
+      link.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8.5" r="3.2" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M3 19 c0-4 3-6 6-6 s6 2 6 6" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="17" cy="9.5" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 13.5 c3 0 5 2 5 5" fill="none" stroke="currentColor" stroke-width="2"/></svg>Friends<b class="sm-badge" hidden></b>';
+      var chip = side.querySelector('.sm-account:not(.sm-friends)');
+      side.insertBefore(link, chip);
+    }
+    if (!badgeTimer) {
+      checkBadge();
+      badgeTimer = setInterval(function () { if (!document.hidden) checkBadge(); }, 45000);
+    }
+  }
+  function checkBadge() {
+    SH.api('/chat/unread').then(function (r) {
+      var badge = document.querySelector('.sm-friends .sm-badge');
+      if (!badge) return;
+      var n = (r.messages || 0) + (r.requests || 0);
+      badge.textContent = n > 99 ? '99+' : n;
+      badge.hidden = !n;
+    }).catch(function (e) {
+      if (/switched on|Not found/.test(e.message)) { friendsOn = false; renderFriends(false); }
+    });
   }
 
   function ready(f) { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', f); else f(); }

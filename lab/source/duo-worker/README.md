@@ -66,3 +66,14 @@ Accounts are free too. They need a GitHub "OAuth App" so people can sign in with
 Stick Hubs only reads each person's public GitHub username and picture (no email, no repositories).
 Profiles are public. Anyone can report a profile; after 3 reports its pictures, name and bio are removed.
 With your owner pass saved in Duo settings on your device, the profile page shows "Owner: reset this profile".
+
+
+## Friends and chat (D1 database)
+
+Friends and chat keep their data in a free Cloudflare D1 database, because KV only allows about 1,000 writes a day on the free plan.
+
+1. In the Cloudflare dashboard go to **Storage & databases > D1 SQL Database > Create**, and name it `stick-hubs-friends`.
+2. Open the Worker, then **Settings > Bindings > Add binding > D1 database**. Variable name: `SH_DB`, database: `stick-hubs-friends`.
+3. Deploy. The tables are made automatically the first time someone opens the Friends page.
+
+Reported chat messages: send a POST to `/owner/reports` with the header `x-duo-owner: <OWNER_PASS>`.

@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Friends · Stick Hubs</title>
+<meta name="description" content="Add friends on Stick Hubs and chat with them.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@400;600;700;800&display=swap">
+<style>
+:root { --gold: #ffcf3f; --ember: #e2603c; --text: #f4ecdf; --muted: #b9ab9a; --earth: #17110f; --panel: #241c26; --panel2: #1e1714;
+  --display: "Lilita One", "Arial Black", system-ui, sans-serif; --body: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--earth); color: var(--text); font-family: var(--body); font-size: 16px; line-height: 1.55; }
+.wrap { max-width: 980px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--display); font-weight: 400; letter-spacing: .5px; text-wrap: balance; margin: 0; }
+p { margin: 0; }
+a { color: var(--gold); }
+section { padding-block: 40px; }
+section h2 { font-size: 30px; color: var(--gold); }
+.intro { color: var(--muted); margin-top: 6px; max-width: 62ch; }
+.band { background: var(--panel2); }
+.hero { background: linear-gradient(160deg, #1d1530 0%, #5a2a3a 60%, #b8503a 100%); }
+.hero .wrap { padding-block: 48px; }
+.eyebrow { display: inline-block; font-weight: 800; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--earth); background: var(--gold); padding: 3px 10px; border-radius: 4px; }
+.hero h1 { font-size: clamp(40px, 7vw, 68px); line-height: 1; color: var(--gold); text-shadow: 0 4px 0 #1a0f05; margin-top: 12px; }
+.hero p { color: #f1dcc8; margin-top: 12px; max-width: 46ch; font-size: 17px; }
+.btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.btn { display: inline-flex; align-items: center; gap: 8px; font-family: var(--display); font-size: 19px; color: #fff; text-decoration: none; border-radius: 12px;
+  padding: 10px 18px; border: 3px solid var(--gold); background: linear-gradient(180deg, #d84530, #8f2414); box-shadow: 0 4px 0 #4a120a; }
+.btn.play { background: linear-gradient(180deg, #ff9a1f, #d96b00); box-shadow: 0 4px 0 #6b3400; }
+.btn.ghost { background: transparent; box-shadow: none; border-color: #6b5a50; font-size: 17px; }
+.btn:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 20px; }
+.card { background: var(--panel); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+.card img { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover; }
+.card .in { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.card h3 { font-size: 22px; color: #fff; }
+.card p { color: var(--muted); font-size: 14px; }
+.card .meta { font-size: 12px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--ember); }
+.card .btns { margin-top: auto; padding-top: 6px; }
+.card .btn { font-size: 16px; padding: 8px 14px; }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 20px; }
+.tile { display: flex; flex-direction: column; gap: 6px; text-decoration: none; background: var(--panel); border-radius: 14px; padding: 18px; border: 2px solid transparent; }
+.tile:hover { border-color: var(--gold); }
+.tile b { font-family: var(--display); font-weight: 400; font-size: 22px; color: #fff; }
+.tile span { color: var(--muted); font-size: 14px; }
+.tile svg { width: 28px; height: 28px; color: var(--gold); }
+.news { list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 12px; }
+.news li { background: var(--panel); border-radius: 12px; padding: 14px 16px; display: grid; grid-template-columns: 110px 1fr; gap: 12px; }
+.news .v { font-family: var(--display); font-size: 20px; color: var(--gold); }
+.news .d { display: block; font-size: 12px; color: var(--muted); font-family: var(--body); font-weight: 700; }
+.topics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 20px; }
+.topic { background: var(--panel); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.topic h3 { font-size: 21px; color: #fff; }
+.topic p { color: var(--muted); font-size: 14px; }
+.topic .btns { margin-top: auto; }
+.rules { margin-top: 16px; background: #2d2118; border-left: 4px solid var(--ember); padding: 14px 18px; border-radius: 0 10px 10px 0; color: #f1dcc8; }
+.rules ul { margin: 6px 0 0; padding-left: 20px; }
+.copy { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.copy code { background: #0d0908; color: var(--gold); padding: 8px 12px; border-radius: 8px; font-size: 15px; overflow-wrap: anywhere; }
+.copy button { font: 800 14px var(--body); color: #fff; background: #2b2030; border: 2px solid var(--gold); border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+footer { border-top: 1px solid #3a2e2a; padding-block: 22px 36px; color: var(--muted); font-size: 14px; }
+footer a.v16 { display: inline-block; margin-left: 10px; padding: 5px 12px; border-radius: 999px; background: #ffcf3f; color: #1a0f05; font-weight: 800; text-decoration: none; }
+.grid.feature { grid-template-columns: 1.3fr 1fr; align-items: stretch; }
+@media (max-width: 900px) { .grid, .tiles { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .grid, .grid.feature, .tiles, .topics { grid-template-columns: 1fr; } .news li { grid-template-columns: 1fr; } }
+
+.btn.live { background: #e0283a; color: #fff; border-color: #e0283a; letter-spacing: .08em; }
+.btn.live:hover { background: #f23a4c; }
+.live-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #fff; margin-right: 8px; animation: livePulse 1.2s ease-in-out infinite; }
+@keyframes livePulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.7); } }
+.sm-link[href="youtube.html"] svg { color: #ff5466; }
+.btn.yt-btn svg { width: 24px; height: 17px; margin-right: 8px; vertical-align: -3px; }
+.btn.yt-btn svg path:first-child { fill: #fff; }
+.btn.yt-btn svg path:last-child { fill: #e0283a; }
+/* ---- Stick Manx vertical menu ---- */
+:root { --side-w: 228px; --side-bg: #120d14; --side-line: #2c2230; }
+.sm-side { position: fixed; top: 0; left: 0; bottom: 0; width: var(--side-w); background: var(--side-bg); border-right: 1px solid var(--side-line);
+  display: flex; flex-direction: column; gap: 6px; padding: calc(18px + env(safe-area-inset-top, 0px)) 14px calc(18px + env(safe-area-inset-bottom, 0px)) max(14px, env(safe-area-inset-left, 0px)); z-index: 20; }
+.sm-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; padding: 4px 8px 16px; }
+.sm-brand b { font-family: "Lilita One", "Arial Black", sans-serif; font-weight: 400; font-size: 23px; color: #ffcf3f; letter-spacing: .5px; line-height: 1; white-space: nowrap; }
+.sm-brand small { display: block; font: 700 11px/1.3 "Nunito", system-ui, sans-serif; color: #b9ab9a; letter-spacing: .5px; }
+.sm-nav { display: flex; flex-direction: column; gap: 4px; }
+.sm-link { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 12px; color: #e9dfd2; text-decoration: none;
+  font: 800 16px/1 "Nunito", system-ui, sans-serif; }
+.sm-link svg { width: 22px; height: 22px; flex: 0 0 22px; color: #b9ab9a; }
+.sm-link:hover { background: #221a26; }
+.sm-link[aria-current="page"] { background: #2b2030; color: #fff; box-shadow: inset 4px 0 0 #ffcf3f; }
+.sm-link[aria-current="page"] svg { color: #ffcf3f; }
+.sm-link:focus-visible, .sm-cta:focus-visible, .sm-toggle:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.sm-cta { margin-top: auto; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border-radius: 12px; text-decoration: none;
+  font: 400 18px/1 "Lilita One", "Arial Black", sans-serif; color: #fff; background: linear-gradient(180deg, #ff9a1f, #d96b00); border: 2px solid #ffcf3f; }
+.sm-foot { font: 600 12px/1.4 "Nunito", system-ui, sans-serif; color: #8d8073; padding: 4px 8px 0; }
+.sm-toggle { display: none; }
+.sm-page { margin-left: var(--side-w); min-width: 0; }
+@media (max-width: 820px) {
+  .sm-side { position: sticky; top: 0; bottom: auto; width: auto; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0;
+    padding: calc(10px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px)); border-right: 0; border-bottom: 1px solid var(--side-line); }
+  .sm-brand { padding: 0; }
+  .sm-toggle { display: inline-flex; margin-left: auto; align-items: center; gap: 8px; background: #2b2030; color: #fff; border: 2px solid #ffcf3f; border-radius: 10px;
+    padding: 8px 12px; font: 800 15px/1 "Nunito", system-ui, sans-serif; cursor: pointer; }
+  .sm-nav, .sm-cta, .sm-foot { display: none; flex-basis: 100%; }
+  .sm-side.open .sm-nav { display: flex; padding-top: 12px; }
+  .sm-side.open .sm-cta { display: flex; margin-top: 10px; }
+  .sm-page { margin-left: 0; }
+}
+</style>
+<script src="lang.js" defer></script>
+<script src="account.js" defer></script>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="48x48">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="site.webmanifest">
+<link rel="canonical" href="https://stick-hubs.github.io/account.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Stick Manx">
+<meta property="og:title" content="Your account · Stick Hubs">
+<meta property="og:description" content="Sign in to Stick Hubs with GitHub and customize your profile.">
+<meta property="og:url" content="https://stick-hubs.github.io/account.html">
+<meta property="og:image" content="https://stick-hubs.github.io/hero2.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="classic.css">
+</head>
+<style>
+/* Friends and chat (classic Stick Hubs look) */
+.fr-wrap { display: grid; grid-template-columns: 270px 1fr; gap: 14px; margin-top: 16px; min-height: 480px; }
+.fr-box { border: 1px solid var(--c-line); border-radius: 3px; background: #fff; display: flex; flex-direction: column; min-width: 0; }
+.fr-head { padding: 7px 10px; font: bold 13px var(--display); color: #fff; background: linear-gradient(180deg, #5c9be0, #2a6ab8 50%, #1d5aa6 51%, #3279c8); border-radius: 2px 2px 0 0; display: flex; align-items: center; gap: 6px; }
+.fr-head .grow { flex: 1; }
+.fr-add { display: flex; gap: 6px; padding: 8px; border-bottom: 1px solid var(--c-line); background: var(--c-soft); }
+.fr-add input { flex: 1; min-width: 0; font: inherit; padding: 4px 6px; border: 1px solid #9fb2c9; border-radius: 2px; }
+.fr-list { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; }
+.fr-list li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid #eef2f7; cursor: pointer; }
+.fr-list li:hover, .fr-list li.on { background: #e8f1fb; }
+.fr-list img { width: 30px; height: 30px; border-radius: 4px; border: 1px solid #b6c6da; object-fit: cover; flex: none; background: #fff; }
+.fr-list .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fr-list .nm small { display: block; color: #777; font-size: 11px; }
+.fr-list .dot { width: 9px; height: 9px; border-radius: 50%; background: #bbb; flex: none; }
+.fr-list .dot.on { background: #34b233; box-shadow: 0 0 4px #5ee05c; }
+.fr-badge { background: #d93a2b; color: #fff; font: bold 11px Verdana, sans-serif; border-radius: 9px; padding: 1px 6px; min-width: 18px; text-align: center; }
+.fr-sec { padding: 5px 8px; font-size: 11px; font-weight: bold; color: #1d4f91; background: #f3f7fc; border-bottom: 1px solid #e2e9f2; text-transform: uppercase; letter-spacing: .5px; }
+.fr-mini { font: bold 11px Verdana, sans-serif; padding: 2px 7px; border-radius: 3px; border: 1px solid #7f9db9; background: linear-gradient(180deg, #fff, #dde7f3); cursor: pointer; color: #1f3550; }
+.fr-mini.ok { color: #fff; border-color: #2a7a26; background: linear-gradient(180deg, #78d26f, #3aa033); }
+.fr-empty { padding: 14px; color: #777; font-size: 12px; text-align: center; }
+.chat-msgs { flex: 1; overflow: auto; padding: 12px; background: linear-gradient(180deg, #f7fbff, #eef4fb); display: flex; flex-direction: column; gap: 6px; min-height: 300px; max-height: 60vh; }
+.msg { max-width: 75%; padding: 6px 10px; border-radius: 10px; border: 1px solid #b9cde3; background: linear-gradient(180deg, #ffffff, #e9f1fb); align-self: flex-start; position: relative; word-wrap: break-word; box-shadow: 0 1px 2px rgba(30,60,110,.12); }
+.msg.me { align-self: flex-end; border-color: #8fc0f2; background: linear-gradient(180deg, #dff0ff, #b9dcfb); }
+.msg time { display: block; font-size: 10px; color: #7a8a9e; margin-top: 2px; }
+.msg .rep { position: absolute; top: -8px; right: -8px; display: none; font-size: 10px; padding: 1px 5px; border-radius: 8px; border: 1px solid #c98b80; background: #fff; color: #a3321f; cursor: pointer; }
+.msg:hover .rep, .msg:focus-within .rep { display: block; }
+.chat-form { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--c-line); background: var(--c-soft); }
+.chat-form input { flex: 1; min-width: 0; font: inherit; padding: 6px 8px; border: 1px solid #9fb2c9; border-radius: 2px; }
+.chat-note { font-size: 11px; color: #777; padding: 0 10px 8px; background: var(--c-soft); }
+.safety { margin-top: 14px; border: 1px solid #e3c27a; background: #fff8e1; border-radius: 3px; padding: 8px 12px; font-size: 12px; color: #5a4a1a; }
+.back-btn { display: none; }
+.chat-blank { flex: 1; display: flex; align-items: center; justify-content: center; color: #777; padding: 30px; text-align: center; }
+@media (max-width: 720px) {
+  .fr-wrap { grid-template-columns: 1fr; }
+  .fr-wrap.chatting .fr-left { display: none; }
+  .fr-wrap:not(.chatting) .fr-right { display: none; }
+  .back-btn { display: inline-block; }
+}
+</style>
+<link rel="stylesheet" href="classic.css">
+</head>
+<body>
+<aside class="sm-side"><a class="sm-brand" href="index.html"><svg width="34" height="40" viewBox="0 0 40 56" aria-hidden="true"><path d="M20 34 L12 54 M20 34 L28 54 M20 15 V34 M20 20 L31 27" stroke="#ffcf3f" stroke-width="5" stroke-linecap="round" fill="none"/><path d="M31 27 L38 8" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/><circle cx="20" cy="9" r="7.5" fill="#ffcf3f"/></svg><span><b>STICK HUBS</b><small>Powering imagination</small></span></a><button class="sm-toggle" type="button" aria-expanded="false" aria-label="Open menu"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></svg>Menu</button><nav class="sm-nav" aria-label="Main"><a class="sm-link" href="index.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 L12 4 L21 11 M6 9.5 V20 H18 V9.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/></svg>Home</a><a class="sm-link" href="youtube.html"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5.5" width="19" height="13" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10 9.2 L15 12 L10 14.8 Z" fill="currentColor"/></svg>YouTube</a><a class="sm-link" href="games.html"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="7" width="19" height="11" rx="5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M7 10.5 v4 M5 12.5 h4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="16" cy="11.5" r="1.4" fill="currentColor"/><circle cx="18" cy="14" r="1.4" fill="currentColor"/></svg>Game Hub</a><a class="sm-link" href="forum.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5 H20 V15 H10 L5 19 V15 H4 Z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/></svg>Forum</a><a class="sm-link" href="community.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8.5" r="3.2" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M3 19 c0-4 3-6 6-6 s6 2 6 6" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="17" cy="9.5" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 13.5 c3 0 5 2 5 5" fill="none" stroke="currentColor" stroke-width="2"/></svg>Community</a><a class="sm-link" href="animation.html"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M10 9 L15.5 12 L10 15 Z" fill="currentColor"/><path d="M3 9 H6 M3 15 H6 M18 9 H21 M18 15 H21" stroke="currentColor" stroke-width="1.8"/></svg>Animation</a><a class="sm-link" href="books.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.5 C9.5 5 6.5 4.5 3.5 5 V18.5 C6.5 18 9.5 18.5 12 20 C14.5 18.5 17.5 18 20.5 18.5 V5 C17.5 4.5 14.5 5 12 6.5 Z M12 6.5 V20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></svg>Books</a><a class="sm-link" href="stick-lab.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3 h6 M10 3 v6 L4.5 19 a1.6 1.6 0 0 0 1.4 2.3 h12.2 a1.6 1.6 0 0 0 1.4-2.3 L14 9 V3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/><path d="M7.5 15 h9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>Stick Lab</a></nav><a class="sm-cta" href="play.html"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4 L20 12 L7 20 Z" fill="#fff"/></svg>Play Stick Legions</a><div class="sm-foot">Made in Scratch · free to play</div></aside><div class="sm-page">
+<main><section><div class="wrap">
+  <h2>Friends</h2>
+  <p class="intro">Add friends by their Stick Hubs username and chat with them. Only friends can message you.</p>
+  <div id="signedout" hidden><p style="margin-top:14px">Sign in to add friends and chat.</p><div class="btns"><button class="btn play" id="signin" type="button">Sign in with GitHub</button></div></div>
+  <div id="off" hidden><p style="margin-top:14px">Friends aren't switched on yet. Check back soon!</p></div>
+  <div class="fr-wrap" id="app" hidden>
+    <div class="fr-box fr-left">
+      <div class="fr-head">Your friends<span class="grow"></span><span id="count"></span></div>
+      <form class="fr-add" id="addform"><input id="addname" placeholder="Add by username" maxlength="39" autocomplete="off" aria-label="Username to add"><button class="fr-mini ok" type="submit">Add</button></form>
+      <ul class="fr-list" id="list"></ul>
+    </div>
+    <div class="fr-box fr-right" id="chatbox">
+      <div class="chat-blank">Pick a friend to chat with.</div>
+    </div>
+  </div>
+  <div class="safety" id="safety" hidden><b>Stay safe:</b> never share your real name, address, school, phone number or passwords, and never agree to meet someone you only know online.
+    Chat hides swear words, phone numbers, emails, links and other apps. If someone makes you uncomfortable, <b>report</b> the message (hover over it), <b>block</b> them, and tell a parent or teacher.</div>
+</div></section></main>
+<footer><div class="wrap">Stick Manx · free Scratch games by akami · <a href="links.html">Links</a> · <a href="roblox_user_2000.html">Roblox_User_2000</a> <a class="v16" href="play-v16.html">▶ Play V1.6</a></div></footer></div><script>
+(function () {
+  var side = document.querySelector('.sm-side'), btn = document.querySelector('.sm-toggle');
+  if (btn) btn.addEventListener('click', function () { var open = side.classList.toggle('open'); btn.setAttribute('aria-expanded', open ? 'true' : 'false'); });
+})();
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var state = {data: null, open: null, last: 0, poll: null, me: null};
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]; }); }
+  function flash(t) { alert(t); }
+  function post(path, body) { return SH.api(path, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body || {})}); }
+  function av(p) { return '<img alt="" src="' + esc(p.avatar || 'icon-192.png') + '" onerror="this.src=\'icon-192.png\'">'; }
+  function time(ms) { var d = new Date(ms); var today = new Date().toDateString() === d.toDateString(); return today ? d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : d.toLocaleDateString(); }
+
+  function load() {
+    return SH.api('/friends').then(function (data) {
+      state.data = data;
+      renderList();
+    }).catch(function (e) {
+      if (/switched on|Not found/.test(e.message)) { $('app').hidden = true; $('safety').hidden = true; $('off').hidden = false; }
+    });
+  }
+
+  function renderList() {
+    var d = state.data, html = '';
+    if (d.incoming.length) {
+      html += '<li class="fr-sec">Friend requests</li>' + d.incoming.map(function (p) {
+        return '<li>' + av(p) + '<span class="nm">' + esc(p.displayName) + '<small>@' + esc(p.login) + '</small></span>' +
+          '<button class="fr-mini ok" data-act="accept" data-login="' + esc(p.login) + '">Accept</button><button class="fr-mini" data-act="decline" data-login="' + esc(p.login) + '">&times;</button></li>';
+      }).join('');
+    }
+    html += '<li class="fr-sec">Friends (' + d.friends.length + ')</li>';
+    html += d.friends.length ? d.friends.map(function (p) {
+      return '<li data-chat="' + esc(p.login) + '"' + (state.open === p.login ? ' class="on"' : '') + '>' + av(p) + '<span class="nm">' + esc(p.displayName) + '<small>@' + esc(p.login) + (p.online ? ' &middot; online' : '') + '</small></span>' +
+        (p.unread ? '<span class="fr-badge">' + p.unread + '</span>' : '') + '<span class="dot' + (p.online ? ' on' : '') + '" title="' + (p.online ? 'Online' : 'Offline') + '"></span></li>';
+    }).join('') : '<li class="fr-empty">No friends yet. Add someone by their username above.</li>';
+    if (d.outgoing.length) {
+      html += '<li class="fr-sec">Waiting for them</li>' + d.outgoing.map(function (p) {
+        return '<li>' + av(p) + '<span class="nm">' + esc(p.displayName) + '<small>@' + esc(p.login) + ' &middot; request sent</small></span><button class="fr-mini" data-act="decline" data-login="' + esc(p.login) + '" title="Cancel request">Cancel</button></li>';
+      }).join('');
+    }
+    if (d.blocked.length) {
+      html += '<li class="fr-sec">Blocked</li>' + d.blocked.map(function (l) {
+        return '<li><span class="nm">@' + esc(l) + '</span><button class="fr-mini" data-act="unblock" data-login="' + esc(l) + '">Unblock</button></li>';
+      }).join('');
+    }
+    $('list').innerHTML = html;
+    $('count').textContent = d.friends.length + ' / 200';
+  }
+
+  function friend(login) { return (state.data.friends || []).filter(function (f) { return f.login.toLowerCase() === login.toLowerCase(); })[0]; }
+
+  function openChat(login) {
+    var f = friend(login);
+    if (!f) return;
+    state.open = f.login; state.last = 0;
+    history.replaceState(null, '', '#' + f.login);
+    $('app').classList.add('chatting');
+    $('chatbox').innerHTML = '<div class="fr-head"><button class="fr-mini back-btn" data-act="back" type="button">&#9664;</button>' + av(f).replace('<img', '<img style="width:22px;height:22px;border-radius:3px;border:1px solid rgba(255,255,255,.6)"') + ' ' + esc(f.displayName) +
+      '<span id="online" style="font-weight:normal;font-size:11px"></span><span class="grow"></span><a class="fr-mini" href="profile.html?u=' + encodeURIComponent(f.login) + '" style="text-decoration:none">Profile</a>' +
+      '<button class="fr-mini" data-act="remove" data-login="' + esc(f.login) + '">Unfriend</button><button class="fr-mini" data-act="block" data-login="' + esc(f.login) + '">Block</button></div>' +
+      '<div class="chat-msgs" id="msgs"><div class="fr-empty">Loading...</div></div>' +
+      '<form class="chat-form" id="sendform"><input id="text" maxlength="200" placeholder="Say something nice..." autocomplete="off" aria-label="Message"><button class="btn play" style="font-size:14px;padding:5px 14px" type="submit">Send</button></form>' +
+      '<div class="chat-note">Messages are filtered. Hover over a message to report it.</div>';
+    renderList();
+    fetchMessages(true);
+    clearInterval(state.poll);
+    state.poll = setInterval(function () { if (!document.hidden) fetchMessages(false); }, 4000);
+    var t = $('text'); if (t && window.innerWidth > 720) t.focus();
+  }
+
+  function addMessages(list, scroll) {
+    var box = $('msgs');
+    if (!box) return;
+    if (!state.last) box.innerHTML = list.length ? '' : '<div class="fr-empty">Say hi! This is the start of your chat.</div>';
+    else if (list.length && box.querySelector('.fr-empty')) box.innerHTML = '';
+    var atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+    list.forEach(function (m) {
+      if (m.id <= state.last) return;
+      state.last = m.id;
+      var mine = m.sender === state.me;
+      var el = document.createElement('div');
+      el.className = 'msg' + (mine ? ' me' : '');
+      el.innerHTML = esc(m.body) + '<time>' + time(m.created) + '</time>' + (mine ? '' : '<button class="rep" data-act="report" data-id="' + m.id + '" type="button">Report</button>');
+      box.appendChild(el);
+    });
+    if (scroll || atBottom) box.scrollTop = box.scrollHeight;
+  }
+
+  function fetchMessages(first) {
+    var login = state.open;
+    if (!login) return;
+    SH.api('/chat/with/' + encodeURIComponent(login) + (state.last ? '?after=' + state.last : '')).then(function (r) {
+      if (state.open !== login) return;
+      addMessages(r.messages, first);
+      var on = $('online'); if (on) on.textContent = r.online ? ' ● online' : '';
+      var f = friend(login); if (f && f.unread) { f.unread = 0; renderList(); }
+    }).catch(function (e) {
+      if (first) $('msgs').innerHTML = '<div class="fr-empty">' + esc(e.message) + '</div>';
+    });
+  }
+
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-act]');
+    var row = e.target.closest('[data-chat]');
+    if (b) {
+      var act = b.getAttribute('data-act'), login = b.getAttribute('data-login');
+      if (act === 'back') { state.open = null; clearInterval(state.poll); $('app').classList.remove('chatting'); history.replaceState(null, '', location.pathname); $('chatbox').innerHTML = '<div class="chat-blank">Pick a friend to chat with.</div>'; load(); return; }
+      if (act === 'report') {
+        var why = prompt('Why are you reporting this message? (The owner of Stick Hubs will see it.)', '');
+        if (why === null) return;
+        post('/chat/report', {id: +b.getAttribute('data-id'), reason: why}).then(function () { flash('Thanks. The message was reported. You can also block this person.'); }, function (er) { flash(er.message); });
+        return;
+      }
+      if ((act === 'remove' && !confirm('Unfriend @' + login + '?')) || (act === 'block' && !confirm('Block @' + login + '? They won\'t be able to add you or message you.'))) return;
+      post('/friends/' + act, {login: login}).then(function () {
+        if (act === 'remove' || act === 'block') { state.open = null; clearInterval(state.poll); $('app').classList.remove('chatting'); $('chatbox').innerHTML = '<div class="chat-blank">Pick a friend to chat with.</div>'; }
+        return load();
+      }, function (er) { flash(er.message); });
+      return;
+    }
+    if (row) openChat(row.getAttribute('data-chat'));
+  });
+
+  document.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (e.target.id === 'addform') {
+      var name = $('addname').value.trim().replace(/^@/, '');
+      if (!name) return;
+      post('/friends/request', {login: name}).then(function (r) {
+        $('addname').value = '';
+        flash(r.status === 'friends' ? 'You and @' + name + ' are now friends!' : 'Friend request sent to @' + name + '.');
+        load();
+      }, function (er) { flash(er.message); });
+    } else if (e.target.id === 'sendform') {
+      var input = $('text'), text = input.value.trim();
+      if (!text || !state.open) return;
+      input.value = '';
+      post('/chat/send', {to: state.open, text: text}).then(function (r) {
+        addMessages([r.message], true);
+      }, function (er) { input.value = text; flash(er.message); });
+    }
+  });
+
+  $('signin').addEventListener('click', function () { SH.signIn(); });
+  if (!SH.session()) { $('signedout').hidden = false; return; }
+  SH.me().then(function (p) {
+    if (!p) { $('signedout').hidden = false; return; }
+    state.me = p.login.toLowerCase();
+    $('app').hidden = false; $('safety').hidden = false;
+    load().then(function () {
+      var want = decodeURIComponent(location.hash.slice(1));
+      if (want && state.data && friend(want)) openChat(want);
+    });
+    setInterval(function () { if (!document.hidden && !state.open) load(); }, 30000);
+  }).catch(function () { $('signedout').hidden = false; });
+});
+</script>
+</body>
+</html>

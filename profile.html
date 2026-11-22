@@ -142,6 +142,7 @@ footer a.v16 { display: inline-block; margin-left: 10px; padding: 5px 12px; bord
     <p class="hub-state" id="pf-none" hidden>No published games yet.</p>
   </div>
   <div class="acc-row acc-bottom" id="pf-actions" hidden>
+    <button class="btn play" id="pf-friend" hidden>Add friend</button>
     <a class="btn ghost" href="games.html#community">Game Hub</a>
     <a class="btn ghost" id="pf-edit" href="account.html" hidden>Edit my profile</a>
     <button class="btn ghost" id="pf-report">Report this profile</button>
@@ -190,6 +191,25 @@ document.addEventListener('DOMContentLoaded', function () {
       fillProfileCard($('pf-card'), p); $('pf-card').hidden = false; state('');
       $('pf-projects').hidden = false; $('pf-actions').hidden = false;
       var mine = SH.cached(); if (mine && mine.login.toLowerCase() === p.login.toLowerCase()) $('pf-edit').hidden = false;
+      (SH.session() ? (mine ? Promise.resolve(mine) : SH.me()) : Promise.resolve(null)).then(function (me) {
+        if (!me || me.login.toLowerCase() === p.login.toLowerCase()) return;
+        // friends: show Add friend / Request sent / Chat
+        return SH.api('/friends').then(function (f) {
+          var lower = p.login.toLowerCase(), has = function (list) { return list.some(function (x) { return x.login.toLowerCase() === lower; }); };
+          var b = $('pf-friend'); b.hidden = false;
+          if (has(f.friends)) { b.textContent = 'Chat'; b.onclick = function () { location.href = 'friends.html#' + p.login; }; }
+          else if (has(f.outgoing)) { b.textContent = 'Friend request sent'; b.disabled = true; }
+          else {
+            b.textContent = has(f.incoming) ? 'Accept friend request' : 'Add friend';
+            b.onclick = function () {
+              SH.api('/friends/request', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({login: p.login})}).then(function (r) {
+                if (r.status === 'friends') { b.textContent = 'Chat'; b.onclick = function () { location.href = 'friends.html#' + p.login; }; }
+                else { b.textContent = 'Friend request sent'; b.disabled = true; }
+              }, function (e) { alert(e.message); });
+            };
+          }
+        });
+      }).catch(function () {});
       var settings = {}; try { settings = JSON.parse(localStorage.getItem('stick-lab-duo-settings') || '{}'); } catch (e) {}
       if (settings.ownerPass) $('pf-reset').hidden = false;
       var grid = $('pf-grid');

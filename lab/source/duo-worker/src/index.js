@@ -15,6 +15,8 @@
 //   GITHUB_CLIENT_SECRET (secret)   the app's client secret
 // KV namespace binding:
 //   DUO_KV               stores Duo message counts, Game Hub projects and accounts
+// D1 database binding (for friends and chat):
+//   SH_DB                friend lists, chat messages, reports (tables are made automatically)
 
 const MODEL = 'claude-opus-5-5';
 const MAX_TOKENS = 4096;
@@ -611,6 +613,279 @@ const handleProfileReport = async (request, env, cors) => {
     return json(200, {ok: true, reset: owner}, cors);
 };
 
+// ---------------------------------------------------------------- friends and chat
+// Stored in a D1 database (binding SH_DB) because KV only allows about 1,000 writes a day
+// on the free plan. Only accepted friends can chat. Every message goes through a filter
+// that hides swear words, phone numbers, emails, links and "add me on ..." apps, like Roblox.
+
+const FRIEND_LIMIT = 200;
+const MSG_MAX = 200;
+const MSG_GAP_MS = 1200; // one message per 1.2 seconds
+const MSG_DAILY = 500;
+const REQUESTS_DAILY = 30;
+
+let schemaReady = null;
+const db = env => {
+    if (!env.SH_DB) return null;
+    if (!schemaReady) {
+        schemaReady = env.SH_DB.batch([
+            'CREATE TABLE IF NOT EXISTS friends (a TEXT NOT NULL, b TEXT NOT NULL, status TEXT NOT NULL, asker TEXT NOT NULL, created INTEGER NOT NULL, PRIMARY KEY (a, b))',
+            'CREATE INDEX IF NOT EXISTS friends_b ON friends (b)',
+            'CREATE TABLE IF NOT EXISTS blocks (who TEXT NOT NULL, blocked TEXT NOT NULL, created INTEGER NOT NULL, PRIMARY KEY (who, blocked))',
+            'CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, a TEXT NOT NULL, b TEXT NOT NULL, sender TEXT NOT NULL, body TEXT NOT NULL, created INTEGER NOT NULL, unread INTEGER NOT NULL DEFAULT 1)',
+            'CREATE INDEX IF NOT EXISTS messages_pair ON messages (a, b, id)',
+            'CREATE INDEX IF NOT EXISTS messages_sender ON messages (sender, created)',
+            'CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, reporter TEXT NOT NULL, target TEXT NOT NULL, message_id INTEGER, body TEXT, reason TEXT, created INTEGER NOT NULL)',
+            'CREATE TABLE IF NOT EXISTS mutes (login TEXT PRIMARY KEY, until INTEGER NOT NULL)',
+            'CREATE TABLE IF NOT EXISTS seen (login TEXT PRIMARY KEY, at INTEGER NOT NULL)'
+        ].map(sql => env.SH_DB.prepare(sql))).catch(e => {
+            schemaReady = null;
+            throw e;
+        });
+    }
+    return schemaReady.then(() => env.SH_DB);
+};
+
+const pair = (x, y) => (x < y ? [x, y] : [y, x]);
+const lc = s => String(s || '').toLowerCase();
+
+const BAD_WORDS = /\b(f+u+c+k\w*|sh[i1]t\w*|b[i1]tch\w*|cunt\w*|d[i1]ck\w*|puss(y|ies)|n[i1]gg\w*|fag\w*|slut\w*|wh[o0]re\w*|bastard\w*|asshole\w*|porn\w*|sex\w*|nude\w*|kontol\w*|anjing\w*|bangsat\w*|memek\w*|ngentot\w*|babi\b|goblok\w*|tolol\w*)/gi;
+const OFF_SITE = /\b(discord|snap(chat)?|insta(gram)?|whats ?app|wa\.me|telegram|tele\b|tiktok|facebook|fb\b|line id|kik|skype|messenger|phone|hp\b|alamat|address)\b/gi;
+const LINKS = /\b((https?:\/\/|www\.)\S+|\S+\.(com|net|org|io|gg|me|xyz|id|co|ly|app|link)\b\S*)/gi;
+const EMAILS = /\S+@\S+\.\S+/g;
+const NUMBERS = /(\+?\d[\d\s\-().]{5,}\d)/g; // phone numbers and other long numbers
+
+// Hides anything unsafe with #### and says whether something was hidden.
+const filterMessage = text => {
+    let hidden = false;
+    const hide = m => {
+        hidden = true;
+        return '#'.repeat(Math.max(4, Math.min(m.length, 12)));
+    };
+    let out = String(text).replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, MSG_MAX);
+    out = out.replace(LINKS, m => (/^(https?:\/\/)?stick-hubs\.github\.io(\/|$)/i.test(m) ? m : hide(m)));
+    out = out.replace(EMAILS, hide).replace(NUMBERS, hide).replace(BAD_WORDS, hide).replace(OFF_SITE, hide);
+    return {text: out, hidden};
+};
+
+const friendCard = (user, base) => {
+    const p = publicProfile(user, base);
+    return {login: p.login, displayName: p.displayName, avatar: p.avatar, accent: p.accent};
+};
+
+const markSeen = async (d, login) => {
+    // remember when someone was last on, at most once every 2 minutes (saves database writes)
+    const row = await d.prepare('SELECT at FROM seen WHERE login = ?').bind(login).first();
+    const now = Date.now();
+    if (!row || now - row.at > 120000) await d.prepare('INSERT INTO seen (login, at) VALUES (?, ?) ON CONFLICT(login) DO UPDATE SET at = excluded.at').bind(login, now).run();
+};
+
+const needFriends = async (request, env, cors) => {
+    const user = await sessionUser(request, env);
+    if (!user) return {error: json(401, {error: 'Sign in with GitHub first.'}, cors)};
+    const d = await db(env);
+    if (!d) return {error: json(503, {error: 'Friends aren\'t switched on yet. The owner needs to add the SH_DB database.'}, cors)};
+    return {user, me: lc(user.login), d};
+};
+
+const blockedEither = async (d, x, y) => !!(await d.prepare('SELECT 1 FROM blocks WHERE (who = ? AND blocked = ?) OR (who = ? AND blocked = ?)').bind(x, y, y, x).first());
+
+const handleFriends = async (request, env, cors, base) => {
+    const ctx = await needFriends(request, env, cors);
+    if (ctx.error) return ctx.error;
+    const {me, d} = ctx;
+    await markSeen(d, me);
+    const rows = (await d.prepare('SELECT a, b, status, asker FROM friends WHERE a = ? OR b = ? LIMIT 400').bind(me, me).all()).results || [];
+    const unread = (await d.prepare('SELECT sender, COUNT(*) AS n FROM messages WHERE (a = ? OR b = ?) AND sender != ? AND unread = 1 GROUP BY sender').bind(me, me, me).all()).results || [];
+    const unreadBy = Object.fromEntries(unread.map(r => [r.sender, r.n]));
+    const blocked = ((await d.prepare('SELECT blocked FROM blocks WHERE who = ?').bind(me).all()).results || []).map(r => r.blocked);
+    const others = rows.map(r => (r.a === me ? r.b : r.a));
+    const seen = others.length ? (await d.prepare(`SELECT login, at FROM seen WHERE login IN (${others.map(() => '?').join(',')})`).bind(...others).all()).results || [] : [];
+    const seenBy = Object.fromEntries(seen.map(r => [r.login, r.at]));
+    const out = {friends: [], incoming: [], outgoing: [], blocked};
+    for (const r of rows) {
+        const other = r.a === me ? r.b : r.a;
+        const u = await userByLogin(env, other);
+        if (!u) continue;
+        const card = friendCard(u, base);
+        if (r.status === 'friends') {
+            card.unread = unreadBy[other] || 0;
+            card.online = !!seenBy[other] && Date.now() - seenBy[other] < 5 * 60000;
+            out.friends.push(card);
+        } else if (r.asker === me) {
+            out.outgoing.push(card);
+        } else {
+            out.incoming.push(card);
+        }
+    }
+    out.friends.sort((x, y) => (y.unread - x.unread) || (y.online - x.online) || x.displayName.localeCompare(y.displayName));
+    return json(200, out, cors);
+};
+
+const handleFriendAction = async (request, env, cors, action) => {
+    const ctx = await needFriends(request, env, cors);
+    if (ctx.error) return ctx.error;
+    const {me, d} = ctx;
+    let body = {};
+    try {
+        body = await request.json();
+    } catch (e) {
+        // empty
+    }
+    const other = lc(body.login).replace(/^@/, '').trim();
+    if (!/^[a-z0-9-]{1,39}$/.test(other)) return json(400, {error: 'Type a Stick Hubs username.'}, cors);
+    if (other === me) return json(400, {error: 'You can\'t add yourself.'}, cors);
+    const [a, b] = pair(me, other);
+    const row = await d.prepare('SELECT status, asker FROM friends WHERE a = ? AND b = ?').bind(a, b).first();
+    const now = Date.now();
+
+    if (action === 'request') {
+        const target = await userByLogin(env, other);
+        if (!target) return json(404, {error: 'There is no Stick Hubs account called "' + other + '". They need to sign in to Stick Hubs once first.'}, cors);
+        if (await blockedEither(d, me, other)) return json(403, {error: 'You can\'t add this person.'}, cors);
+        if (row && row.status === 'friends') return json(200, {ok: true, status: 'friends'}, cors);
+        if (row && row.asker !== me) { // they already asked me: just accept
+            await d.prepare('UPDATE friends SET status = \'friends\' WHERE a = ? AND b = ?').bind(a, b).run();
+            return json(200, {ok: true, status: 'friends'}, cors);
+        }
+        if (row) return json(200, {ok: true, status: 'sent'}, cors);
+        const count = await d.prepare('SELECT COUNT(*) AS n FROM friends WHERE a = ? OR b = ?').bind(me, me).first();
+        if (count.n >= FRIEND_LIMIT) return json(429, {error: `You can have up to ${FRIEND_LIMIT} friends and requests.`}, cors);
+        const sentToday = await d.prepare('SELECT COUNT(*) AS n FROM friends WHERE asker = ? AND created > ?').bind(me, now - 86400000).first();
+        if (sentToday.n >= REQUESTS_DAILY) return json(429, {error: 'You\'ve sent a lot of friend requests today. Try again tomorrow.'}, cors);
+        await d.prepare('INSERT INTO friends (a, b, status, asker, created) VALUES (?, ?, \'pending\', ?, ?)').bind(a, b, me, now).run();
+        return json(200, {ok: true, status: 'sent'}, cors);
+    }
+    if (action === 'accept') {
+        if (!row || row.asker === me) return json(404, {error: 'That friend request isn\'t there any more.'}, cors);
+        await d.prepare('UPDATE friends SET status = \'friends\' WHERE a = ? AND b = ?').bind(a, b).run();
+        return json(200, {ok: true, status: 'friends'}, cors);
+    }
+    if (action === 'decline' || action === 'remove') {
+        await d.prepare('DELETE FROM friends WHERE a = ? AND b = ?').bind(a, b).run();
+        return json(200, {ok: true}, cors);
+    }
+    if (action === 'block') {
+        await d.batch([
+            d.prepare('DELETE FROM friends WHERE a = ? AND b = ?').bind(a, b),
+            d.prepare('INSERT OR IGNORE INTO blocks (who, blocked, created) VALUES (?, ?, ?)').bind(me, other, now)
+        ]);
+        return json(200, {ok: true}, cors);
+    }
+    if (action === 'unblock') {
+        await d.prepare('DELETE FROM blocks WHERE who = ? AND blocked = ?').bind(me, other).run();
+        return json(200, {ok: true}, cors);
+    }
+    return json(404, {error: 'Not found'}, cors);
+};
+
+const areFriends = async (d, me, other) => {
+    const [a, b] = pair(me, other);
+    const row = await d.prepare('SELECT status FROM friends WHERE a = ? AND b = ?').bind(a, b).first();
+    return !!row && row.status === 'friends';
+};
+
+const handleChatRead = async (request, env, cors, other, url) => {
+    const ctx = await needFriends(request, env, cors);
+    if (ctx.error) return ctx.error;
+    const {me, d} = ctx;
+    other = lc(other);
+    if (!(await areFriends(d, me, other))) return json(403, {error: 'You can only chat with friends.'}, cors);
+    const [a, b] = pair(me, other);
+    const after = Math.max(0, parseInt(url.searchParams.get('after') || '0', 10) || 0);
+    const rows = after ?
+        (await d.prepare('SELECT id, sender, body, created FROM messages WHERE a = ? AND b = ? AND id > ? ORDER BY id LIMIT 100').bind(a, b, after).all()).results :
+        ((await d.prepare('SELECT id, sender, body, created FROM messages WHERE a = ? AND b = ? ORDER BY id DESC LIMIT 60').bind(a, b).all()).results || []).reverse();
+    if ((rows || []).some(r => r.sender === other)) {
+        await d.prepare('UPDATE messages SET unread = 0 WHERE a = ? AND b = ? AND sender = ? AND unread = 1').bind(a, b, other).run();
+    }
+    await markSeen(d, me);
+    const seen = await d.prepare('SELECT at FROM seen WHERE login = ?').bind(other).first();
+    return json(200, {messages: rows || [], online: !!seen && Date.now() - seen.at < 5 * 60000}, cors);
+};
+
+const handleChatSend = async (request, env, cors) => {
+    const ctx = await needFriends(request, env, cors);
+    if (ctx.error) return ctx.error;
+    const {me, d} = ctx;
+    let body = {};
+    try {
+        body = await request.json();
+    } catch (e) {
+        // empty
+    }
+    const other = lc(body.to);
+    if (!/^[a-z0-9-]{1,39}$/.test(other) || !(await areFriends(d, me, other))) return json(403, {error: 'You can only chat with friends.'}, cors);
+    if (await blockedEither(d, me, other)) return json(403, {error: 'You can\'t message this person.'}, cors);
+    const now = Date.now();
+    const mute = await d.prepare('SELECT until FROM mutes WHERE login = ?').bind(me).first();
+    if (mute && mute.until > now) return json(403, {error: 'Your chat is paused until ' + new Date(mute.until).toISOString().slice(0, 10) + ' because of reports.'}, cors);
+    const last = await d.prepare('SELECT created FROM messages WHERE sender = ? ORDER BY created DESC LIMIT 1').bind(me).first();
+    if (last && now - last.created < MSG_GAP_MS) return json(429, {error: 'Slow down a little!'}, cors);
+    const todayCount = await d.prepare('SELECT COUNT(*) AS n FROM messages WHERE sender = ? AND created > ?').bind(me, now - 86400000).first();
+    if (todayCount.n >= MSG_DAILY) return json(429, {error: 'You\'ve sent a lot of messages today. Try again tomorrow.'}, cors);
+    const {text, hidden} = filterMessage(body.text || '');
+    if (!text) return json(400, {error: 'Type a message first.'}, cors);
+    const [a, b] = pair(me, other);
+    const res = await d.prepare('INSERT INTO messages (a, b, sender, body, created) VALUES (?, ?, ?, ?, ?)').bind(a, b, me, text, now).run();
+    return json(200, {message: {id: res.meta.last_row_id, sender: me, body: text, created: now}, hidden}, cors);
+};
+
+const handleUnread = async (request, env, cors) => {
+    const ctx = await needFriends(request, env, cors);
+    if (ctx.error) return ctx.error;
+    const {me, d} = ctx;
+    await markSeen(d, me);
+    const msgs = await d.prepare('SELECT COUNT(*) AS n FROM messages WHERE (a = ? OR b = ?) AND sender != ? AND unread = 1').bind(me, me, me).first();
+    const reqs = await d.prepare('SELECT COUNT(*) AS n FROM friends WHERE (a = ? OR b = ?) AND status = \'pending\' AND asker != ?').bind(me, me, me).first();
+    return json(200, {messages: msgs.n, requests: reqs.n}, cors);
+};
+
+const handleChatReport = async (request, env, cors) => {
+    const ctx = await needFriends(request, env, cors);
+    if (ctx.error) return ctx.error;
+    const {me, d} = ctx;
+    let body = {};
+    try {
+        body = await request.json();
+    } catch (e) {
+        // empty
+    }
+    const msg = await d.prepare('SELECT id, a, b, sender, body FROM messages WHERE id = ?').bind(parseInt(body.id, 10) || 0).first();
+    if (!msg || (msg.a !== me && msg.b !== me) || msg.sender === me) return json(404, {error: 'Message not found.'}, cors);
+    const now = Date.now();
+    await d.prepare('INSERT INTO reports (reporter, target, message_id, body, reason, created) VALUES (?, ?, ?, ?, ?, ?)')
+        .bind(me, msg.sender, msg.id, msg.body, String(body.reason || '').slice(0, 200), now).run();
+    // three different people reporting someone in a week pauses their chat for 3 days until the owner looks
+    const reporters = await d.prepare('SELECT COUNT(DISTINCT reporter) AS n FROM reports WHERE target = ? AND created > ?').bind(msg.sender, now - (7 * 86400000)).first();
+    if (reporters.n >= 3) {
+        await d.prepare('INSERT INTO mutes (login, until) VALUES (?, ?) ON CONFLICT(login) DO UPDATE SET until = excluded.until').bind(msg.sender, now + (3 * 86400000)).run();
+    }
+    return json(200, {ok: true}, cors);
+};
+
+// The owner (OWNER_PASS) can read reports and pause or unpause someone's chat.
+const handleOwnerReports = async (request, env, cors) => {
+    if (!isOwner(request, env)) return json(403, {error: 'Owner password needed.'}, cors);
+    const d = await db(env);
+    if (!d) return json(503, {error: 'No SH_DB database.'}, cors);
+    let body = {};
+    try {
+        body = await request.json();
+    } catch (e) {
+        // empty
+    }
+    if (body.mute) {
+        const days = Math.max(0, Math.min(365, parseInt(body.days, 10) || 0));
+        if (days) await d.prepare('INSERT INTO mutes (login, until) VALUES (?, ?) ON CONFLICT(login) DO UPDATE SET until = excluded.until').bind(lc(body.mute), Date.now() + (days * 86400000)).run();
+        else await d.prepare('DELETE FROM mutes WHERE login = ?').bind(lc(body.mute)).run();
+    }
+    if (body.dismiss) await d.prepare('DELETE FROM reports WHERE id = ?').bind(parseInt(body.dismiss, 10) || 0).run();
+    const reports = (await d.prepare('SELECT * FROM reports ORDER BY id DESC LIMIT 100').all()).results || [];
+    const mutes = (await d.prepare('SELECT * FROM mutes WHERE until > ?').bind(Date.now()).all()).results || [];
+    return json(200, {reports, mutes}, cors);
+};
+
 // ---------------------------------------------------------------- router
 
 export default {
@@ -634,6 +909,10 @@ export default {
             if (u) return handleProfile(env, cors, base, u[1]);
             const im = /^\/img\/(avatar|banner)\/([0-9]{1,20})$/.exec(path);
             if (im) return handleImage(env, cors, im[1], im[2]);
+            if (path === '/friends') return handleFriends(request, env, cors, base);
+            if (path === '/chat/unread') return handleUnread(request, env, cors);
+            const cw = /^\/chat\/with\/([A-Za-z0-9-]{1,39})$/.exec(path);
+            if (cw) return handleChatRead(request, env, cors, cw[1], url);
             if (path === '/hub/list') return handleList(env, cors);
             const m = /^\/hub\/(info|file|thumb)\/([a-z0-9]{4,20})$/.exec(path);
             if (m) return m[1] === 'info' ? handleInfo(env, cors, m[2]) : handleFile(env, cors, m[2], m[1]);
@@ -654,6 +933,11 @@ export default {
         if (path === '/me/avatar') return handleMeImage(request, env, cors, base, 'avatar');
         if (path === '/me/banner') return handleMeImage(request, env, cors, base, 'banner');
         if (path === '/u/report') return handleProfileReport(request, env, cors);
+        const fa = /^\/friends\/(request|accept|decline|remove|block|unblock)$/.exec(path);
+        if (fa) return handleFriendAction(request, env, cors, fa[1]);
+        if (path === '/chat/send') return handleChatSend(request, env, cors);
+        if (path === '/chat/report') return handleChatReport(request, env, cors);
+        if (path === '/owner/reports') return handleOwnerReports(request, env, cors);
         return json(404, {error: 'Not found'}, cors);
     }
 };
