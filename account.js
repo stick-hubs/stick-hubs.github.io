@@ -84,8 +84,8 @@
     if (!chip) {
       chip = document.createElement('a');
       chip.className = 'sm-account';
-      var cta = side.querySelector('.sm-cta');
-      side.insertBefore(chip, cta);
+      // keep the language switcher last, to the right of the account button
+      side.insertBefore(chip, side.querySelector('.sm-lang'));
     }
     chip.textContent = '';
     var profile = SH.cached();

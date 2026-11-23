@@ -45,7 +45,7 @@ function init(){
   document.addEventListener('click',function(e){ if(!box.contains(e.target)) close(); });
   document.addEventListener('keydown',function(e){ if(e.key==='Escape') close(); });
   var side=document.querySelector('.sm-side'), tog=side&&side.querySelector('.sm-toggle');
-  if(tog) side.insertBefore(box,tog); else document.body.appendChild(box);
+  if(side){ box.classList.add('in-head'); side.appendChild(box); } else document.body.appendChild(box);
   var gs=document.querySelector('script[src*="giscus.app"]'); if(gs) gs.setAttribute('data-lang',GL());
   window.addEventListener('message',function(e){ if(e.origin==='https://giscus.app'&&GL()!=='en'){ var g=document.querySelector('iframe.giscus-frame'); if(g&&!g.dataset.smLang){ g.dataset.smLang=1; g.contentWindow.postMessage({giscus:{setConfig:{lang:GL()}}},'https://giscus.app'); } } });
   apply();

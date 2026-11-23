@@ -302,3 +302,16 @@ footer {
 .sm-side .sm-friends + .sm-account { margin-left: 0; }
 .sm-badge { position: absolute; top: -7px; right: -7px; background: #d93a2b; color: #fff; font: bold 10px Verdana, sans-serif; border-radius: 9px; padding: 1px 5px; border: 1px solid #fff; }
 .sm-badge[hidden] { display: none !important; }
+
+/* Header right side: Friends, account and language sit side by side (the language switcher used to float on top) */
+.sm-side .sm-brand { margin-right: auto; }
+.sm-side .sm-account { margin-left: 0 !important; }
+.sm-side .sm-lang.in-head { position: relative; top: auto; right: auto; order: 1; margin: 0 0 14px 0; z-index: 20; }
+@media (max-width: 820px) {
+  .sm-side .sm-lang.in-head { margin-bottom: 12px; }
+  .sm-side .sm-account { max-width: 150px; }
+}
+@media (max-width: 480px) {
+  .sm-side .sm-brand { flex-basis: 100%; margin-bottom: 10px; }
+  .sm-side .sm-account:not(.sm-friends) { max-width: 46vw; }
+}
