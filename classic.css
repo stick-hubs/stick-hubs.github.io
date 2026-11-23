@@ -315,3 +315,28 @@ footer {
   .sm-side .sm-brand { flex-basis: 100%; margin-bottom: 10px; }
   .sm-side .sm-account:not(.sm-friends) { max-width: 46vw; }
 }
+
+/* Swiss search */
+.swiss-logo { display: flex; align-items: center; justify-content: center; gap: 12px; font: 700 44px/1 var(--display, sans-serif); color: #2c5f8f; letter-spacing: .5px; text-shadow: 0 1px 0 #fff; }
+.swiss-logo svg { width: 46px; height: 46px; }
+.swiss-tag, .hero p.swiss-tag { text-align: center; max-width: none; color: #557; font-size: 15px; margin-top: 8px; }
+.swiss-box { display: flex; max-width: 640px; margin: 18px auto 0; border: 1px solid #8ea4c1; border-radius: 30px; background: #fff; box-shadow: inset 0 1px 3px rgba(0,0,0,.12), 0 1px 0 #fff; overflow: hidden; }
+.swiss-box:focus-within { border-color: #3d8de0; box-shadow: 0 0 0 3px #bcdcfa; }
+.swiss-box input { flex: 1; min-width: 0; border: 0; outline: 0; padding: 12px 20px; font-size: 18px; background: transparent; color: #222; }
+.swiss-box button { display: inline-flex; align-items: center; gap: 6px; border: 0; padding: 0 22px; font: 600 16px sans-serif; color: #fff; cursor: pointer; background: linear-gradient(180deg, #5aa8f0, #2a6ab8); border-left: 1px solid #2a5a99; }
+.swiss-box button:hover { background: linear-gradient(180deg, #6db6f6, #3279c8); }
+.swiss-box.big input { padding: 16px 24px; font-size: 20px; }
+.swiss-home .wrap { padding-block: 46px 40px; }
+@media (max-width: 480px) { .swiss-box button span { display: none; } .swiss-logo { font-size: 36px; } }
+.sw-list { list-style: none; padding: 0; margin: 8px 0 22px; }
+.sw-list li { padding: 12px 0; border-bottom: 1px dotted #c9d6e6; }
+.sw-list a { font-size: 19px; color: #1a4fa0; font-weight: 600; }
+.sw-url { display: block; color: #2a7a3a; font-size: 13px; margin-top: 2px; }
+.sw-list p { margin: 4px 0 0; font-size: 16px; line-height: 1.5; color: #333; }
+.sw-wait { color: #666; font-size: 16px; }
+.sw-card { display: flex; gap: 16px; align-items: flex-start; border: 1px solid #c9d6e6; border-radius: 6px; padding: 16px; margin: 8px 0 22px; background: linear-gradient(180deg, #fff, #f3f8fd); }
+.sw-card img { width: 120px; height: auto; border-radius: 4px; flex: none; }
+.sw-card h3 { margin: 0 0 6px; font-size: 22px; }
+.sw-card p { font-size: 16px; line-height: 1.55; margin: 0 0 8px; }
+@media (max-width: 560px) { .sw-card { flex-direction: column; } }
+.sw-web { font-size: 16px; }
