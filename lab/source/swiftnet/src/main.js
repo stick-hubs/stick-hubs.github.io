@@ -6,7 +6,8 @@ const fs = require('fs');
 const HOME_DEFAULT = 'https://stick-hubs.github.io/';
 const UPDATE_URL = 'https://stick-hubs.github.io/downloads/swiftnet-latest.json';
 const STORE_PAGE = 'https://stick-hubs.github.io/store.html#swiftnet';
-const CLAUDE_URL = 'https://claude.ai/new';
+const CLAUDE_URL = (!app.isPackaged && process.env.SWIFTNET_CLAUDE_URL) || 'https://claude.ai/new';
+const PANEL_HEAD = 38;
 const PARTITION = 'persist:swiftnet';
 const IS_MAC = process.platform === 'darwin';
 const SEARCH = {
@@ -324,9 +325,11 @@ class SwiftWindow {
         const side = this.claudeOpen ? Math.min(settings.claudeWidth, Math.max(280, width - 360)) : 0;
         const h = Math.max(0, height - this.top - this.bottom);
         if (tab) tab.view.setBounds({x: 0, y: this.top, width: width - side, height: h});
+        this.side = side;
         if (this.claude) {
             this.claude.setVisible(this.claudeOpen);
-            if (this.claudeOpen) this.claude.setBounds({x: width - side + 1, y: this.top, width: side - 1, height: h});
+            const head = PANEL_HEAD + (this.panelMessage ? 34 : 0);
+            if (this.claudeOpen) this.claude.setBounds({x: width - side + 1, y: this.top + head, width: side - 1, height: Math.max(0, h - head)});
         }
     }
 
@@ -345,6 +348,7 @@ class SwiftWindow {
         }
         this.layout();
         this.sendState();
+        setTimeout(() => this.sendState(), 50);
     }
 
     zoom (step) {
@@ -402,6 +406,9 @@ class SwiftWindow {
         case 'print': if (wc) wc.print(); break;
         case 'devtools': if (wc) wc.toggleDevTools(); break;
         case 'claude': this.toggleClaude(); break;
+        case 'askPage': this.askAboutPage(); break;
+        case 'claudeTab': this.newTab(this.claude ? this.claude.webContents.getURL() : CLAUDE_URL); break;
+        case 'claudeHome': if (this.claude) this.claude.webContents.loadURL(CLAUDE_URL).catch(() => {}); break;
         case 'bookmark': toggleBookmark(tab); break;
         case 'bookmarksBar': settings.bookmarksBar = !settings.bookmarksBar; saveSettings(); break;
         case 'open': this.newTab(arg); break;
@@ -473,6 +480,75 @@ class SwiftWindow {
         this.command(cmd, arg);
     }
 
+    panelNote (text) {
+        this.panelMessage = text;
+        this.layout();
+        this.sendState();
+        clearTimeout(this.noteTimer);
+        if (text) this.noteTimer = setTimeout(() => this.panelNote(''), 7000);
+    }
+
+    // "Ask about this page": puts the page (or the text you selected) into Claude's message box.
+    // Nothing is sent until you add your question and press Enter yourself.
+    async askAboutPage () {
+        const tab = this.current();
+        const url = tab ? tab.view.webContents.getURL() : '';
+        if (!tab || !/^https?:/.test(url)) {
+            if (!this.claudeOpen) this.toggleClaude();
+            this.panelNote('Open a website first, then press Ask about this page.');
+            return;
+        }
+        let page;
+        try {
+            page = await tab.view.webContents.executeJavaScript(`(() => {
+                const sel = String(getSelection() || '').trim();
+                const root = document.querySelector('main, article, [role=main]') || document.body;
+                return {sel, text: (root ? root.innerText : '').replace(/\\n{3,}/g, '\\n\\n').trim(), title: document.title, url: location.href};
+            })()`, true);
+        } catch (e) {
+            this.panelNote('Couldn\'t read this page.');
+            return;
+        }
+        const MAX = 20000;
+        const body = page.sel || page.text || '';
+        const cut = body.length > MAX ? body.slice(0, MAX) + '\n[... the rest of the page was cut off]' : body;
+        const text = (page.sel ?
+            `Here is some text I selected on the web page "${page.title}" (${page.url}):\n\n${cut}\n\n` :
+            `Here is the web page I'm looking at.\nTitle: ${page.title}\nAddress: ${page.url}\n\n${cut}\n\n`) + 'My question: ';
+        if (!this.claudeOpen) this.toggleClaude();
+        const cwc = this.claude.webContents;
+        if (cwc.isLoading()) {
+            await new Promise(resolve => {
+                const done = () => resolve();
+                cwc.once('did-stop-loading', done);
+                setTimeout(done, 10000);
+            });
+            await new Promise(r => setTimeout(r, 800));
+        }
+        let found = false;
+        try {
+            found = await cwc.executeJavaScript(`(() => {
+                const box = document.querySelector('div.ProseMirror[contenteditable="true"], [contenteditable="true"][role="textbox"], div[contenteditable="true"], textarea');
+                if (!box) return false;
+                box.focus();
+                const r = document.createRange(); r.selectNodeContents(box); r.collapse(false);
+                const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+                return true;
+            })()`, true);
+        } catch (e) {
+            found = false;
+        }
+        if (found) {
+            cwc.focus();
+            await cwc.insertText(text); // typed into Claude's box; your clipboard is left alone
+            this.panelNote(page.sel ? 'Your selected text is in Claude\'s message box. Type your question and press Enter.' :
+                'This page is in Claude\'s message box. Type your question and press Enter.');
+        } else {
+            clipboard.writeText(text);
+            this.panelNote('Sign in to Claude first. The page is copied: paste it into the message box (Ctrl+V).');
+        }
+    }
+
     pageMenu (tab, p) {
         const wc = tab.view.webContents;
         const items = [];
@@ -501,6 +577,7 @@ class SwiftWindow {
         } else if (p.selectionText) {
             const short = p.selectionText.trim().slice(0, 30) + (p.selectionText.trim().length > 30 ? '...' : '');
             items.push({label: 'Copy', role: 'copy'});
+            items.push({label: `Ask Claude about "${short}"`, click: () => this.askAboutPage()});
             items.push({label: `Search ${SEARCH[settings.search].name} for "${short}"`, click: () => this.newTab(SEARCH[settings.search].url.replace('%s', encodeURIComponent(p.selectionText.trim())), {after: tab.id})});
             items.push({type: 'separator'});
         }
@@ -573,6 +650,7 @@ class SwiftWindow {
             fullscreen: this.win.isFullScreen(),
             htmlFullscreen: !!this.fullscreenTab,
             claudeOpen: this.claudeOpen,
+            panel: this.claudeOpen ? {width: this.side || 0, head: PANEL_HEAD, message: this.panelMessage || ''} : null,
             update: latestUpdate,
             downloads: downloadList().filter(d => d.state === 'progressing' || Date.now() - d.time < 60000).slice(-4),
             searchName: SEARCH[settings.search].name
@@ -903,7 +981,7 @@ app.whenReady().then(() => {
     setTimeout(checkUpdate, 4000);
     setInterval(checkUpdate, 6 * 60 * 60 * 1000);
     // test hook: SWIFTNET_TEST=<script path> runs a test script with access to the app
-    if (process.env.SWIFTNET_TEST) setTimeout(() => require(process.env.SWIFTNET_TEST)({app, windows, settings, SwiftWindow, bookmarks: () => bookmarks, history: () => history}), 1500);
+    if (!app.isPackaged && process.env.SWIFTNET_TEST) setTimeout(() => require(process.env.SWIFTNET_TEST)({app, windows, settings, SwiftWindow, bookmarks: () => bookmarks, history: () => history}), 1500);
 });
 
 app.on('before-quit', flushJson);

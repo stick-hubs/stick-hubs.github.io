@@ -44,6 +44,17 @@
     <button id="findclose" title="Close (Esc)" aria-label="Close find bar"><svg viewBox="0 0 16 16"><path d="M4 4 L12 12 M12 4 L4 12" stroke="currentColor" stroke-width="1.8"/></svg></button>
   </div>
 </div>
+<div id="panelhead" hidden>
+  <div class="ph-row">
+    <span class="ph-title"><svg viewBox="0 0 20 20"><path d="M10 2 L11.6 8.4 L18 10 L11.6 11.6 L10 18 L8.4 11.6 L2 10 L8.4 8.4 Z" fill="#d97757"/></svg>Claude</span>
+    <button id="ask" class="ph-ask" data-cmd="askPage" title="Put this page (or the text you selected) into Claude's message box">Ask about this page</button>
+    <span class="grow"></span>
+    <button class="ph-btn" data-cmd="claudeHome" title="New chat"><svg viewBox="0 0 16 16"><path d="M8 3 V13 M3 8 H13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+    <button class="ph-btn" data-cmd="claudeTab" title="Open Claude in a tab"><svg viewBox="0 0 16 16"><path d="M9 3 H13 V7 M13 3 L7.5 8.5 M11 9.5 V13 H3 V5 H6.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button class="ph-btn" data-cmd="claude" title="Close panel"><svg viewBox="0 0 10 10"><path d="M1.5 1.5 L8.5 8.5 M8.5 1.5 L1.5 8.5" stroke="currentColor" stroke-width="1.6"/></svg></button>
+  </div>
+  <div id="phnote" hidden></div>
+</div>
 <div id="downloads" hidden></div>
 <script src="ui.js"></script>
 </body>

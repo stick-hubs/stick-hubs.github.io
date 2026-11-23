@@ -242,6 +242,16 @@
     $('zoom').hidden = s.zoom === 100;
     $('zoom').textContent = s.zoom + '%';
     $('claude').classList.toggle('on', !!s.claudeOpen);
+    var ph = $('panelhead');
+    ph.hidden = !s.panel || !!s.htmlFullscreen;
+    if (s.panel) {
+      ph.style.width = s.panel.width + 'px';
+      ph.style.top = $('chrome').getBoundingClientRect().height + 'px';
+      $('phnote').hidden = !s.panel.message;
+      $('phnote').textContent = s.panel.message;
+      $('ask').disabled = !/^https?:/.test(s.url);
+      $('ask').title = /^https?:/.test(s.url) ? 'Put this page (or the text you selected) into Claude\'s message box' : 'Open a website first';
+    }
     $('update').hidden = !s.update;
     if (s.update) { $('update').textContent = 'Update to ' + s.update.version; $('update').title = s.update.notes || 'A new SwiftNet is out'; }
     var maxBtn = document.querySelector('[data-cmd=max]');
