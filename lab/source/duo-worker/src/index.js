@@ -16,7 +16,8 @@
 // KV namespace binding:
 //   DUO_KV               stores Duo message counts, Game Hub projects and accounts
 // D1 database binding (for friends and chat):
-//   SH_DB                friend lists, chat messages, reports (tables are made automatically)
+//   SH_DB                friend lists, chat messages, reports and the Swiss search index (tables are made automatically)
+// Cron Trigger (for the Swiss search robot): */2 * * * *
 
 const MODEL = 'claude-opus-5-5';
 const MAX_TOKENS = 4096;
@@ -886,6 +887,371 @@ const handleOwnerReports = async (request, env, cors) => {
     return json(200, {reports, mutes}, cors);
 };
 
+// ---------------------------------------------------------------- Swiss search engine
+// Swiss has its own index. A small robot (SwissBot) runs every few minutes from a Cron Trigger,
+// reads a few pages from a list of trusted, family-friendly websites, and saves their words in
+// the same D1 database (binding SH_DB) with SQLite full-text search. It follows robots.txt,
+// reads one page per website at a time, and never leaves the allowed websites, so kids don't
+// land on bad pages. People can suggest a website; the owner approves it before SwissBot visits.
+
+const SWISS_AGENT = 'SwissBot/1.0 (+https://stick-hubs.github.io/swiss-bot.html)';
+const SWISS_PAGES_PER_RUN = 3;       // pages read every time the Cron Trigger runs
+const SWISS_HOST_MAX = 4000;         // pages kept per website
+const SWISS_LINKS_PER_PAGE = 25;     // new links saved from one page
+const SWISS_TEXT_MAX = 6000;         // characters of text kept per page
+const SWISS_HTML_MAX = 600 * 1024;   // bigger pages are cut off
+const SWISS_REVISIT_DAYS = 30;
+const SWISS_SUGGEST_DAILY = 20;      // website suggestions per person per day
+
+// Where SwissBot starts. It only reads pages on these websites (and ones the owner approves).
+const SWISS_SEEDS = [
+    'https://stick-hubs.github.io/',
+    'https://www.nasa.gov/', 'https://science.nasa.gov/', 'https://spaceplace.nasa.gov/',
+    'https://www.weather.gov/', 'https://www.noaa.gov/', 'https://www.usgs.gov/',
+    'https://www.nhs.uk/', 'https://www.cdc.gov/', 'https://medlineplus.gov/', 'https://www.who.int/',
+    'https://www.gutenberg.org/', 'https://www.loc.gov/', 'https://www.si.edu/', 'https://www.smithsonianmag.com/',
+    'https://www.bbc.co.uk/bitesize', 'https://www.bbcgoodfood.com/', 'https://www.bbc.com/news',
+    'https://kids.nationalgeographic.com/', 'https://www.nationalgeographic.com/',
+    'https://developer.mozilla.org/en-US/', 'https://www.w3schools.com/', 'https://docs.python.org/3/',
+    'https://www.python.org/', 'https://scratch.mit.edu/', 'https://www.khanacademy.org/',
+    'https://www.usa.gov/', 'https://www.gov.uk/', 'https://www.ready.gov/',
+    'https://www.metoffice.gov.uk/', 'https://www.nps.gov/', 'https://www.britannica.com/',
+    'https://www.howstuffworks.com/', 'https://www.wikihow.com/', 'https://www.ducksters.com/',
+    'https://www.dkfindout.com/', 'https://www.coolmath.com/', 'https://www.mathsisfun.com/',
+    'https://www.indonesia.go.id/', 'https://www.bmkg.go.id/', 'https://kemkes.go.id/',
+    'https://www.un.org/', 'https://www.unicef.org/', 'https://www.worldwildlife.org/',
+    'https://www.timeanddate.com/', 'https://www.rspb.org.uk/', 'https://www.nhm.ac.uk/'
+];
+const SWISS_SKIP_EXT = /\.(pdf|jpe?g|png|gif|webp|svg|ico|mp[34]|m4a|wav|ogg|webm|mov|avi|zip|gz|rar|7z|exe|dmg|msi|apk|iso|docx?|xlsx?|pptx?|csv|json|xml|rss|atom|css|js|woff2?|ttf)$/i;
+
+let swissReady = null;
+const swissDb = env => {
+    if (!env.SH_DB) return null;
+    if (!swissReady) {
+        swissReady = env.SH_DB.batch([
+            'CREATE TABLE IF NOT EXISTS swiss_urls (url TEXT PRIMARY KEY, host TEXT NOT NULL, depth INTEGER NOT NULL, status INTEGER NOT NULL DEFAULT 0, tries INTEGER NOT NULL DEFAULT 0, added INTEGER NOT NULL, visited INTEGER)',
+            'CREATE INDEX IF NOT EXISTS swiss_urls_next ON swiss_urls (status, depth, added)',
+            'CREATE INDEX IF NOT EXISTS swiss_urls_host ON swiss_urls (host, status)',
+            'CREATE TABLE IF NOT EXISTS swiss_hosts (host TEXT PRIMARY KEY, allowed INTEGER NOT NULL DEFAULT 0, robots TEXT, robots_at INTEGER, pages INTEGER NOT NULL DEFAULT 0, last INTEGER NOT NULL DEFAULT 0)',
+            'CREATE TABLE IF NOT EXISTS swiss_suggest (host TEXT PRIMARY KEY, url TEXT NOT NULL, created INTEGER NOT NULL)',
+            'CREATE TABLE IF NOT EXISTS swiss_rate (k TEXT PRIMARY KEY, n INTEGER NOT NULL)',
+            'CREATE VIRTUAL TABLE IF NOT EXISTS swiss_fts USING fts5(url UNINDEXED, title, description, body, host UNINDEXED, tokenize = "unicode61 remove_diacritics 2")'
+        ].map(sql => env.SH_DB.prepare(sql))).catch(e => {
+            swissReady = null;
+            throw e;
+        });
+    }
+    return swissReady.then(() => env.SH_DB);
+};
+
+const swissNormalize = (href, base) => {
+    let u;
+    try { u = new URL(href, base); } catch (e) { return null; }
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+    if (u.username || u.password || u.port) return null;
+    u.hash = '';
+    u.hostname = u.hostname.toLowerCase();
+    for (const k of [...u.searchParams.keys()]) {
+        if (/^(utm_|fbclid|gclid|ref$|ref_|share|mc_)/i.test(k)) u.searchParams.delete(k);
+    }
+    if ([...u.searchParams.keys()].length > 2) return null; // endless search and filter pages
+    if (SWISS_SKIP_EXT.test(u.pathname)) return null;
+    u.pathname = u.pathname.replace(/\/index\.(html?|php)$/i, '/');
+    if (/\/(login|signin|sign-in|logout|register|cart|checkout|account|search)(\/|$)/i.test(u.pathname)) return null;
+    const s = u.toString();
+    return s.length > 400 ? null : s;
+};
+
+// robots.txt: the rules for "*" (or SwissBot), as [allow, path] pairs; the longest match wins.
+const swissParseRobots = text => {
+    const groups = [];
+    let current = null, lastWasAgent = false;
+    for (const raw of String(text).split(/\r?\n/)) {
+        const line = raw.replace(/#.*/, '').trim();
+        const m = /^([A-Za-z-]+)\s*:\s*(.*)$/.exec(line);
+        if (!m) continue;
+        const key = m[1].toLowerCase(), value = m[2].trim();
+        if (key === 'user-agent') {
+            if (!lastWasAgent) { current = {agents: [], rules: []}; groups.push(current); }
+            current.agents.push(value.toLowerCase());
+            lastWasAgent = true;
+        } else {
+            lastWasAgent = false;
+            if (current && (key === 'allow' || key === 'disallow') && value) current.rules.push([key === 'allow', value]);
+            if (current && key === 'disallow' && !value) current.rules.push([true, '/']);
+        }
+    }
+    const mine = groups.filter(g => g.agents.some(a => a.startsWith('swissbot')));
+    const pick = mine.length ? mine : groups.filter(g => g.agents.includes('*'));
+    return pick.flatMap(g => g.rules);
+};
+const swissRobotsAllow = (rules, pathname) => {
+    let best = null;
+    for (const [allow, pattern] of rules) {
+        const re = new RegExp('^' + pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\\\$$/, '$'));
+        if (re.test(pathname) && (!best || pattern.length > best[1].length || (pattern.length === best[1].length && allow))) best = [allow, pattern];
+    }
+    return !best || best[0];
+};
+
+const swissSeedHosts = () => SWISS_SEEDS.map(s => new URL(s).hostname);
+
+const swissHostAllowed = async (d, host) => {
+    if (swissSeedHosts().includes(host)) return true;
+    const row = await d.prepare('SELECT allowed FROM swiss_hosts WHERE host = ?').bind(host).first();
+    return !!(row && row.allowed);
+};
+
+const swissQueue = async (d, urls, depth) => {
+    const now = Date.now();
+    const stmts = urls.map(u => d.prepare('INSERT OR IGNORE INTO swiss_urls (url, host, depth, added) VALUES (?, ?, ?, ?)').bind(u, new URL(u).hostname, depth, now));
+    for (let i = 0; i < stmts.length; i += 50) await d.batch(stmts.slice(i, i + 50));
+};
+
+const swissRobots = async (d, host) => {
+    const row = await d.prepare('SELECT robots, robots_at FROM swiss_hosts WHERE host = ?').bind(host).first();
+    if (row && row.robots_at && Date.now() - row.robots_at < 7 * 864e5) return JSON.parse(row.robots || '[]');
+    let rules = [];
+    try {
+        const r = await fetch(`https://${host}/robots.txt`, {headers: {'user-agent': SWISS_AGENT}, redirect: 'follow', cf: {cacheTtl: 86400}});
+        if (r.ok) rules = swissParseRobots((await r.text()).slice(0, 200000));
+        else if (r.status === 401 || r.status === 403) rules = [[false, '/']];
+    } catch (e) { /* no robots.txt: everything allowed */ }
+    await d.prepare('INSERT INTO swiss_hosts (host, robots, robots_at) VALUES (?, ?, ?) ON CONFLICT(host) DO UPDATE SET robots = excluded.robots, robots_at = excluded.robots_at')
+        .bind(host, JSON.stringify(rules), Date.now()).run();
+    return rules;
+};
+
+// Read one page with HTMLRewriter (fast and light): title, description, text and links.
+const swissRead = async response => {
+    const page = {title: '', description: '', text: '', links: [], noindex: false, nofollow: false, lang: ''};
+    let skip = 0, inTitle = false, textLen = 0;
+    const addText = t => {
+        if (skip || textLen > SWISS_TEXT_MAX) return;
+        page.text += t; textLen += t.length;
+    };
+    const rewriter = new HTMLRewriter()
+        .on('html', {element: e => { page.lang = (e.getAttribute('lang') || '').slice(0, 5); }})
+        .on('title', {element: e => { inTitle = true; e.onEndTag(() => { inTitle = false; }); }, text: t => { if (inTitle && page.title.length < 200) page.title += t.text; }})
+        .on('meta', {element: e => {
+            const name = (e.getAttribute('name') || e.getAttribute('property') || '').toLowerCase();
+            const content = e.getAttribute('content') || '';
+            if ((name === 'description' || name === 'og:description') && !page.description) page.description = content.slice(0, 300);
+            if (name === 'robots' || name === 'swissbot') {
+                if (/noindex|none/i.test(content)) page.noindex = true;
+                if (/nofollow|none/i.test(content)) page.nofollow = true;
+            }
+        }})
+        .on('script, style, noscript, svg, nav, footer, header, form, template, iframe', {element: e => { skip++; e.onEndTag(() => { skip--; }); }})
+        .on('h1, h2, h3, p, li, td, blockquote, figcaption, dd, dt', {text: t => { addText(t.text); if (t.lastInTextNode) addText(' '); }})
+        .on('a[href]', {element: e => {
+            if (page.links.length < 300 && !/nofollow/i.test(e.getAttribute('rel') || '')) page.links.push(e.getAttribute('href'));
+        }});
+    // Cut off very big pages.
+    const reader = response.body.getReader();
+    let size = 0;
+    const limited = new ReadableStream({
+        async pull (controller) {
+            const {done, value} = await reader.read();
+            if (done || size > SWISS_HTML_MAX) { controller.close(); reader.cancel().catch(() => {}); return; }
+            size += value.byteLength;
+            controller.enqueue(value);
+        }
+    });
+    await rewriter.transform(new Response(limited, {headers: {'content-type': 'text/html'}})).arrayBuffer();
+    const tidy = s => s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, '\'').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+    page.title = tidy(page.title);
+    page.description = tidy(page.description);
+    page.text = tidy(page.text).slice(0, SWISS_TEXT_MAX);
+    return page;
+};
+
+const swissCrawlOne = async (d, row) => {
+    const {url, host, depth} = row;
+    await d.prepare('UPDATE swiss_urls SET status = 2, tries = tries + 1, visited = ? WHERE url = ?').bind(Date.now(), url).run();
+    const rules = await swissRobots(d, host);
+    const u = new URL(url);
+    if (!swissRobotsAllow(rules, u.pathname + u.search)) {
+        await d.prepare('UPDATE swiss_urls SET status = 3 WHERE url = ?').bind(url).run();
+        return 'robots';
+    }
+    let response;
+    try {
+        response = await fetch(url, {headers: {'user-agent': SWISS_AGENT, 'accept': 'text/html', 'accept-language': 'en, id;q=0.8'}, redirect: 'follow'});
+    } catch (e) { return 'error'; }
+    const finalUrl = swissNormalize(response.url || url, url);
+    const type = response.headers.get('content-type') || '';
+    if (!response.ok || !/text\/html|application\/xhtml/i.test(type) || /noindex/i.test(response.headers.get('x-robots-tag') || '')) {
+        await d.prepare('UPDATE swiss_urls SET status = 3 WHERE url = ?').bind(url).run();
+        return 'skip';
+    }
+    if (finalUrl && finalUrl !== url && new URL(finalUrl).hostname !== host && !(await swissHostAllowed(d, new URL(finalUrl).hostname))) {
+        await d.prepare('UPDATE swiss_urls SET status = 3 WHERE url = ?').bind(url).run();
+        return 'left';
+    }
+    const page = await swissRead(response);
+    const all = `${page.title} ${page.description} ${page.text}`;
+    BAD_WORDS.lastIndex = 0;
+    const badHits = (all.match(BAD_WORDS) || []).length;
+    const keep = !page.noindex && page.text.length > 80 && badHits < 2;
+    const stmts = [d.prepare('DELETE FROM swiss_fts WHERE url = ?').bind(url)];
+    if (keep) {
+        stmts.push(d.prepare('INSERT INTO swiss_fts (url, title, description, body, host) VALUES (?, ?, ?, ?, ?)')
+            .bind(url, page.title || u.hostname, page.description, page.text, host));
+        stmts.push(d.prepare('UPDATE swiss_hosts SET pages = pages + 1, last = ? WHERE host = ?').bind(Date.now(), host));
+    }
+    stmts.push(d.prepare('UPDATE swiss_urls SET status = 1 WHERE url = ?').bind(url));
+    await d.batch(stmts);
+    if (!page.nofollow && depth < 6 && badHits < 2) {
+        const seen = new Set(), next = [];
+        for (const href of page.links) {
+            const n = swissNormalize(href, finalUrl || url);
+            if (!n || seen.has(n)) continue;
+            seen.add(n);
+            const h = new URL(n).hostname;
+            if (h === host || swissSeedHosts().includes(h)) next.push(n);
+            if (next.length >= SWISS_LINKS_PER_PAGE) break;
+        }
+        if (next.length) await swissQueue(d, next, depth + 1);
+    }
+    return keep ? 'saved' : 'empty';
+};
+
+const swissCrawl = async env => {
+    const d = await swissDb(env);
+    if (!d) return {error: 'No SH_DB database.'};
+    const count = await d.prepare('SELECT COUNT(*) AS n FROM swiss_urls').first();
+    if (!count || !count.n) await swissQueue(d, SWISS_SEEDS.map(s => swissNormalize(s, s)).filter(Boolean), 0);
+    // Pages that failed a lot are dropped; ones that look stuck go back in the queue.
+    await d.prepare('UPDATE swiss_urls SET status = 0 WHERE status = 2 AND tries < 3 AND visited < ?').bind(Date.now() - 3600e3).run();
+    // Revisit old pages now and then so the index stays fresh.
+    await d.prepare('UPDATE swiss_urls SET status = 0, tries = 0 WHERE rowid IN (SELECT rowid FROM swiss_urls WHERE status = 1 AND visited < ? LIMIT 2)').bind(Date.now() - SWISS_REVISIT_DAYS * 864e5).run();
+    const candidates = (await d.prepare(`SELECT u.url, u.host, u.depth FROM swiss_urls u LEFT JOIN swiss_hosts h ON h.host = u.host
+        WHERE u.status = 0 AND IFNULL(h.pages, 0) < ? ORDER BY u.depth, u.added LIMIT 60`).bind(SWISS_HOST_MAX).all()).results || [];
+    // One page per website each run, and websites read most recently go last.
+    const lastByHost = {};
+    for (const r of (await d.prepare('SELECT host, last FROM swiss_hosts').all()).results || []) lastByHost[r.host] = r.last;
+    const picked = [], hosts = new Set();
+    candidates.sort((a, b) => (lastByHost[a.host] || 0) - (lastByHost[b.host] || 0) || a.depth - b.depth);
+    for (const c of candidates) {
+        if (hosts.has(c.host)) continue;
+        if (!(await swissHostAllowed(d, c.host))) {
+            await d.prepare('UPDATE swiss_urls SET status = 3 WHERE url = ?').bind(c.url).run();
+            continue;
+        }
+        hosts.add(c.host);
+        picked.push(c);
+        if (picked.length >= SWISS_PAGES_PER_RUN) break;
+    }
+    const results = [];
+    for (const row of picked) {
+        await d.prepare('INSERT OR IGNORE INTO swiss_hosts (host) VALUES (?)').bind(row.host).run();
+        await d.prepare('UPDATE swiss_hosts SET last = ? WHERE host = ?').bind(Date.now(), row.host).run();
+        try { results.push([row.url, await swissCrawlOne(d, row)]); } catch (e) { results.push([row.url, 'error: ' + e.message]); }
+    }
+    return {results};
+};
+
+// Search words become an FTS5 query: every word must match (word* also finds longer words).
+const swissMatch = (q, any) => {
+    let words = (String(q).toLowerCase().match(/[\p{L}\p{N}]+/gu) || []).slice(0, 8);
+    const meaningful = words.filter(w => !/^(the|a|an|of|in|on|at|for|to|and|or|is|are|what|how|who|where|why|me|my|i|yang|di|dan|ke|dari)$/.test(w));
+    if (meaningful.length) words = meaningful;
+    if (!words.length) return null;
+    return words.map(w => `"${w}"${w.length > 2 ? '*' : ''}`).join(any ? ' OR ' : ' ');
+};
+
+const handleSwissSearch = async (env, cors, url) => {
+    const d = await swissDb(env);
+    if (!d) return json(503, {error: 'Swiss isn\'t switched on yet.'}, cors);
+    const q = (url.searchParams.get('q') || '').slice(0, 200);
+    const page = Math.max(0, Math.min(9, parseInt(url.searchParams.get('page') || '0', 10) || 0));
+    const run = async any => {
+        const match = swissMatch(q, any);
+        if (!match) return [];
+        return (await d.prepare(`SELECT url, title, description,
+                snippet(swiss_fts, 3, char(1), char(2), '…', 28) AS snip, host
+            FROM swiss_fts WHERE swiss_fts MATCH ? ORDER BY bm25(swiss_fts, 0, 10, 4, 1) LIMIT 11 OFFSET ?`)
+            .bind(match, page * 10).all()).results || [];
+    };
+    let results = [], loose = false;
+    try {
+        results = await run(false);
+        if (!results.length && !page) { results = await run(true); loose = true; }
+    } catch (e) {
+        return json(400, {error: 'Swiss couldn\'t understand that search.'}, cors);
+    }
+    return json(200, {results: results.slice(0, 10), more: results.length > 10, loose}, {...cors, 'cache-control': 'public, max-age=300'});
+};
+
+const handleSwissStats = async (env, cors) => {
+    const d = await swissDb(env);
+    if (!d) return json(503, {error: 'Swiss isn\'t switched on yet.'}, cors);
+    const pages = await d.prepare('SELECT COUNT(*) AS n FROM swiss_fts').first();
+    const sites = await d.prepare('SELECT COUNT(*) AS n FROM swiss_hosts WHERE pages > 0').first();
+    const waiting = await d.prepare('SELECT COUNT(*) AS n FROM swiss_urls WHERE status = 0').first();
+    return json(200, {pages: pages.n, sites: sites.n, waiting: waiting.n}, {...cors, 'cache-control': 'public, max-age=120'});
+};
+
+const handleSwissSuggest = async (request, env, cors) => {
+    const d = await swissDb(env);
+    if (!d) return json(503, {error: 'Swiss isn\'t switched on yet.'}, cors);
+    let body;
+    try { body = await request.json(); } catch (e) { return json(400, {error: 'Bad request'}, cors); }
+    let raw = String(body.url || '').trim();
+    if (raw && !/^https?:\/\//i.test(raw)) raw = 'https://' + raw;
+    const n = swissNormalize(raw, raw);
+    if (!n) return json(400, {error: 'That doesn\'t look like a website address.'}, cors);
+    const host = new URL(n).hostname;
+    if (!/\./.test(host) || /^(\d+\.){3}\d+$/.test(host)) return json(400, {error: 'That doesn\'t look like a website address.'}, cors);
+    if (await swissHostAllowed(d, host)) {
+        await swissQueue(d, [n], 0);
+        return json(200, {ok: true, message: 'Swiss already reads that website. It will visit that page soon.'}, cors);
+    }
+    const key = `sug:${today()}:${clientIp(request)}`;
+    const used = await d.prepare('SELECT n FROM swiss_rate WHERE k = ?').bind(key).first();
+    if (used && used.n >= SWISS_SUGGEST_DAILY) return json(429, {error: 'That\'s enough suggestions for today. Thank you!'}, cors);
+    await d.batch([
+        d.prepare('INSERT INTO swiss_rate (k, n) VALUES (?, 1) ON CONFLICT(k) DO UPDATE SET n = n + 1').bind(key),
+        d.prepare('DELETE FROM swiss_rate WHERE k NOT LIKE ?').bind(`sug:${today()}:%`),
+        d.prepare('INSERT OR IGNORE INTO swiss_suggest (host, url, created) VALUES (?, ?, ?)').bind(host, n, Date.now())
+    ]);
+    return json(200, {ok: true, message: 'Thanks! The owner will check the website, then Swiss will start reading it.'}, cors);
+};
+
+// The owner sees suggested websites and approves or removes them.
+const handleSwissOwner = async (request, env, cors) => {
+    if (!isOwner(request, env)) return json(403, {error: 'Owner only.'}, cors);
+    const d = await swissDb(env);
+    if (!d) return json(503, {error: 'No SH_DB database.'}, cors);
+    let body = {};
+    try { body = await request.json(); } catch (e) { /* list */ }
+    const host = String(body.host || '').toLowerCase();
+    if (body.action === 'approve' && host) {
+        const row = await d.prepare('SELECT url FROM swiss_suggest WHERE host = ?').bind(host).first();
+        await d.batch([
+            d.prepare('INSERT INTO swiss_hosts (host, allowed) VALUES (?, 1) ON CONFLICT(host) DO UPDATE SET allowed = 1').bind(host),
+            d.prepare('DELETE FROM swiss_suggest WHERE host = ?').bind(host)
+        ]);
+        await swissQueue(d, [row ? row.url : `https://${host}/`], 0);
+    } else if (body.action === 'reject' && host) {
+        await d.prepare('DELETE FROM swiss_suggest WHERE host = ?').bind(host).run();
+    } else if (body.action === 'block' && host) {
+        // Take a website out of Swiss completely.
+        await d.batch([
+            d.prepare('INSERT INTO swiss_hosts (host, allowed) VALUES (?, 0) ON CONFLICT(host) DO UPDATE SET allowed = 0, pages = 0').bind(host),
+            d.prepare('DELETE FROM swiss_fts WHERE host = ?').bind(host),
+            d.prepare('UPDATE swiss_urls SET status = 3 WHERE host = ?').bind(host),
+            d.prepare('DELETE FROM swiss_suggest WHERE host = ?').bind(host)
+        ]);
+    } else if (body.action === 'crawl') {
+        return json(200, await swissCrawl(env), cors);
+    }
+    const suggestions = (await d.prepare('SELECT host, url, created FROM swiss_suggest ORDER BY created LIMIT 100').all()).results || [];
+    const sites = (await d.prepare('SELECT host, allowed, pages FROM swiss_hosts WHERE pages > 0 OR allowed = 1 ORDER BY pages DESC LIMIT 200').all()).results || [];
+    return json(200, {suggestions, sites}, cors);
+};
+
 // ---------------------------------------------------------------- router
 
 export default {
@@ -913,6 +1279,8 @@ export default {
             if (path === '/chat/unread') return handleUnread(request, env, cors);
             const cw = /^\/chat\/with\/([A-Za-z0-9-]{1,39})$/.exec(path);
             if (cw) return handleChatRead(request, env, cors, cw[1], url);
+            if (path === '/swiss/search') return handleSwissSearch(env, cors, url);
+            if (path === '/swiss/stats') return handleSwissStats(env, cors);
             if (path === '/hub/list') return handleList(env, cors);
             const m = /^\/hub\/(info|file|thumb)\/([a-z0-9]{4,20})$/.exec(path);
             if (m) return m[1] === 'info' ? handleInfo(env, cors, m[2]) : handleFile(env, cors, m[2], m[1]);
@@ -938,6 +1306,13 @@ export default {
         if (path === '/chat/send') return handleChatSend(request, env, cors);
         if (path === '/chat/report') return handleChatReport(request, env, cors);
         if (path === '/owner/reports') return handleOwnerReports(request, env, cors);
+        if (path === '/swiss/suggest') return handleSwissSuggest(request, env, cors);
+        if (path === '/owner/swiss') return handleSwissOwner(request, env, cors);
         return json(404, {error: 'Not found'}, cors);
+    },
+
+    // Cron Trigger (Settings > Triggers > Cron, for example every 2 minutes): SwissBot reads a few pages.
+    async scheduled (event, env, ctx) {
+        ctx.waitUntil(swissCrawl(env).catch(e => console.log('SwissBot', e.message)));
     }
 };

@@ -131,7 +131,8 @@ footer a.v16 { display: inline-block; margin-left: 10px; padding: 5px 12px; bord
   <div id="sw-box"></div>
 </div></section>
 <section><div class="wrap" style="max-width:820px">
-  <div id="sw-results"><p class="swiss-tag" style="margin-top:0">Search Stick Hubs, Wikipedia and the web. Calm and simple, for everyone.</p></div>
+  <div id="sw-results"><p class="swiss-tag" style="margin-top:0">Search the web, Stick Hubs and Wikipedia. Try <a href="swiss.html?q=weather+Jakarta">weather Jakarta</a>, <a href="swiss.html?q=define+happy">define happy</a>, <a href="swiss.html?q=map+of+Bali">map of Bali</a>, <a href="swiss.html?q=books+by+Roald+Dahl">books by Roald Dahl</a> or <a href="swiss.html?q=12*7%2B5">12*7+5</a>.</p><p class="swiss-tag" id="sw-stats"></p></div>
+  <div id="sw-owner" class="sw-owner" hidden></div>
 </div></section></main>
 <footer><div class="wrap">Stick Manx · free Scratch games by akami · <a href="links.html">Links</a> · <a href="roblox_user_2000.html">Roblox_User_2000</a></div></footer></div><script>
 (function () {
@@ -152,7 +153,34 @@ footer a.v16 { display: inline-block; margin-left: 10px; padding: 5px 12px; bord
   var f = Swiss.box({ big: true, value: q });
   document.getElementById('sw-box').appendChild(f);
   if (q) { document.title = q + ' · Swiss'; Swiss.results(document.getElementById('sw-results'), q); }
-  else f.q.focus();
+  else { f.q.focus(); Swiss.stats(document.getElementById('sw-stats')); }
+
+  // Owner tools: swiss.html?owner (uses the owner pass saved in Stick Lab Duo settings).
+  if (!/[?&]owner\b/.test(location.search)) return;
+  var pass = ''; try { pass = JSON.parse(localStorage.getItem('stick-lab-duo-settings') || '{}').ownerPass || ''; } catch (e) {}
+  var box = document.getElementById('sw-owner'); box.hidden = false;
+  if (!pass) { box.innerHTML = '<p>Owner tools need your owner pass. Add it in Stick Lab → Duo settings first.</p>'; return; }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function call(body) {
+    return Swiss.server().then(function (base) {
+      return fetch(base + '/owner/swiss', { method: 'POST', headers: { 'content-type': 'application/json', 'x-duo-owner': pass }, body: JSON.stringify(body || {}) });
+    }).then(function (r) { return r.json(); }).then(draw).catch(function () { box.innerHTML = '<p>Couldn\'t reach the server.</p>'; });
+  }
+  function draw(d) {
+    if (d.error) { box.innerHTML = '<p>' + esc(d.error) + '</p>'; return; }
+    box.innerHTML = '<h2>Suggested websites</h2>' + (d.suggestions.length ? '<table>' + d.suggestions.map(function (s) {
+        return '<tr><td><a href="' + esc(s.url) + '" target="_blank" rel="noopener">' + esc(s.host) + '</a></td><td><button class="btn" data-a="approve" data-h="' + esc(s.host) + '">Approve</button> <button class="btn" data-a="reject" data-h="' + esc(s.host) + '">No</button></td></tr>';
+      }).join('') + '</table>' : '<p>None right now.</p>') +
+      '<h2>Websites in Swiss</h2><table>' + d.sites.map(function (s) {
+        return '<tr><td>' + esc(s.host) + '</td><td>' + s.pages + ' pages</td><td><button class="btn" data-a="block" data-h="' + esc(s.host) + '">Remove from Swiss</button></td></tr>';
+      }).join('') + '</table>';
+  }
+  box.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-a]'); if (!b) return;
+    if (b.getAttribute('data-a') === 'block' && !confirm('Remove ' + b.getAttribute('data-h') + ' and all its pages from Swiss?')) return;
+    call({ action: b.getAttribute('data-a'), host: b.getAttribute('data-h') });
+  });
+  call();
 })();
 </script>
 </body>
