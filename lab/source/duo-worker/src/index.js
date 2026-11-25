@@ -18,6 +18,7 @@
 // D1 database binding (for friends and chat):
 //   SH_DB                friend lists, chat messages, reports and the Swiss search index (tables are made automatically)
 // Cron Trigger (for the Swiss search robot): */2 * * * *
+// AI                   Workers AI (free daily allowance), used by WorkSheet++ for courses people write themselves
 
 const MODEL = 'claude-opus-5-5';
 const MAX_TOKENS = 4096;
@@ -1252,6 +1253,341 @@ const handleSwissOwner = async (request, env, cors) => {
     return json(200, {suggestions, sites}, cors);
 };
 
+// ---------------------------------------------------------------- WorkSheet++ and Web Store uploads
+// Both use the same D1 database (binding SH_DB). WorkSheet++ saves each account's progress, and makes
+// worksheets with Cloudflare Workers AI (binding AI, free daily allowance) for courses people write
+// themselves. Built-in courses (fractions, English) are made in the browser and need no AI.
+// Web Store: people with an account submit apps (files stay on their own site, like GitHub Releases
+// or itch.io); nothing is shown until the owner approves it.
+
+const WS_SAVE_MAX = 200 * 1024;
+const WS_AI_DAILY_TOTAL = 150;   // AI worksheets per day for everyone together
+const WS_AI_DAILY_USER = 6;      // AI worksheets per account per day
+const WS_AI_MODEL = '@cf/meta/llama-3.1-8b-instruct';
+const STORE_CATEGORIES = ['game', 'education', 'tool', 'creative', 'browser', 'other'];
+const STORE_PLATFORMS = ['web', 'windows', 'mac', 'linux', 'android', 'ios'];
+const STORE_PER_USER = 10;
+const STORE_IMG_MAX = 300 * 1024; // one picture, as a data: URL
+
+let extraReady = null;
+const extraDb = env => {
+    if (!env.SH_DB) return null;
+    if (!extraReady) {
+        extraReady = env.SH_DB.batch([
+            'CREATE TABLE IF NOT EXISTS ws_progress (login TEXT PRIMARY KEY, data TEXT NOT NULL, updated INTEGER NOT NULL)',
+            'CREATE TABLE IF NOT EXISTS ws_rate (k TEXT PRIMARY KEY, n INTEGER NOT NULL)',
+            'CREATE TABLE IF NOT EXISTS ws_feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, login TEXT NOT NULL, course TEXT, question TEXT, note TEXT, created INTEGER NOT NULL)',
+            'CREATE TABLE IF NOT EXISTS store_apps (id TEXT PRIMARY KEY, owner TEXT NOT NULL, name TEXT NOT NULL, tagline TEXT, description TEXT, category TEXT, platforms TEXT, url TEXT NOT NULL, status TEXT NOT NULL, note TEXT, shots INTEGER NOT NULL DEFAULT 0, version INTEGER NOT NULL DEFAULT 1, created INTEGER NOT NULL, updated INTEGER NOT NULL)',
+            'CREATE INDEX IF NOT EXISTS store_apps_status ON store_apps (status, updated)',
+            'CREATE INDEX IF NOT EXISTS store_apps_owner ON store_apps (owner)',
+            'CREATE TABLE IF NOT EXISTS store_images (app TEXT NOT NULL, n INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY (app, n))',
+            'CREATE TABLE IF NOT EXISTS store_ratings (app TEXT NOT NULL, login TEXT NOT NULL, stars INTEGER NOT NULL, PRIMARY KEY (app, login))',
+            'CREATE TABLE IF NOT EXISTS store_reports (id INTEGER PRIMARY KEY AUTOINCREMENT, app TEXT NOT NULL, login TEXT NOT NULL, reason TEXT, created INTEGER NOT NULL)'
+        ].map(sql => env.SH_DB.prepare(sql))).catch(e => {
+            extraReady = null;
+            throw e;
+        });
+    }
+    return extraReady.then(() => env.SH_DB);
+};
+
+const needAccount = async (request, env, cors) => {
+    const user = await sessionUser(request, env);
+    if (!user) return {error: json(401, {error: 'Sign in with GitHub first.'}, cors)};
+    const d = await extraDb(env);
+    if (!d) return {error: json(503, {error: 'This isn\'t switched on yet. The owner needs to add the SH_DB database.'}, cors)};
+    return {user, me: lc(user.login), d};
+};
+
+const bump = async (d, key, limit) => {
+    const row = await d.prepare('SELECT n FROM ws_rate WHERE k = ?').bind(key).first();
+    if (row && row.n >= limit) return false;
+    await d.prepare('INSERT INTO ws_rate (k, n) VALUES (?, 1) ON CONFLICT(k) DO UPDATE SET n = n + 1').bind(key).run();
+    return true;
+};
+
+// ----- WorkSheet++
+
+const handleWsLoad = async (request, env, cors) => {
+    const a = await needAccount(request, env, cors);
+    if (a.error) return a.error;
+    const row = await a.d.prepare('SELECT data, updated FROM ws_progress WHERE login = ?').bind(a.me).first();
+    return json(200, {data: row ? JSON.parse(row.data) : null, updated: row ? row.updated : 0}, cors);
+};
+
+const handleWsSave = async (request, env, cors) => {
+    const a = await needAccount(request, env, cors);
+    if (a.error) return a.error;
+    const text = await request.text();
+    if (text.length > WS_SAVE_MAX) return json(413, {error: 'Too much to save.'}, cors);
+    let body;
+    try { body = JSON.parse(text); } catch (e) { return json(400, {error: 'Bad request'}, cors); }
+    if (!body || typeof body.data !== 'object') return json(400, {error: 'Bad request'}, cors);
+    const now = Date.now();
+    await a.d.prepare('INSERT INTO ws_progress (login, data, updated) VALUES (?, ?, ?) ON CONFLICT(login) DO UPDATE SET data = excluded.data, updated = excluded.updated')
+        .bind(a.me, JSON.stringify(body.data), now).run();
+    return json(200, {ok: true, updated: now}, cors);
+};
+
+const wsClean = (value, max) => {
+    BAD_WORDS.lastIndex = 0;
+    const s = cleanText(value, max);
+    BAD_WORDS.lastIndex = 0;
+    return BAD_WORDS.test(s) ? null : s;
+};
+
+// Turn what the AI wrote into safe, checked questions.
+const wsQuestions = raw => {
+    let text = String(raw || '');
+    const start = text.indexOf('{'), end = text.lastIndexOf('}');
+    if (start < 0 || end < start) return [];
+    let parsed;
+    try { parsed = JSON.parse(text.slice(start, end + 1)); } catch (e) { return []; }
+    const list = Array.isArray(parsed.questions) ? parsed.questions : [];
+    const out = [];
+    for (const q of list.slice(0, 15)) {
+        const prompt = wsClean(q && q.q, 300);
+        if (!prompt) continue;
+        const explain = wsClean(q.explain || '', 300) || '';
+        if (Array.isArray(q.options) && q.options.length >= 2) {
+            const options = q.options.slice(0, 4).map(o => wsClean(o, 120)).filter(o => o);
+            const answer = typeof q.answer === 'number' ? q.answer : options.indexOf(wsClean(q.answer, 120));
+            if (options.length >= 2 && answer >= 0 && answer < options.length && new Set(options).size === options.length) {
+                // the AI likes to put the right answer first: mix the options up
+                const right = options[answer];
+                for (let i = options.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [options[i], options[j]] = [options[j], options[i]];
+                }
+                out.push({type: 'choice', q: prompt, options, answer: options.indexOf(right), explain});
+            }
+        } else if (q.answer !== undefined && q.answer !== null) {
+            const answer = wsClean(q.answer, 80);
+            if (answer) out.push({type: 'type', q: prompt, answer, explain});
+        }
+    }
+    return out;
+};
+
+const handleWsGenerate = async (request, env, cors) => {
+    const a = await needAccount(request, env, cors);
+    if (a.error) return a.error;
+    if (!env.AI) return json(503, {error: 'The AI isn\'t switched on yet. Built-in courses still work.', noAi: true}, cors);
+    let body;
+    try { body = await request.json(); } catch (e) { return json(400, {error: 'Bad request'}, cors); }
+    const subject = wsClean(body.subject, 120);
+    const goal = wsClean(body.goal || '', 300) || '';
+    const level = Math.max(1, Math.min(10, parseInt(body.level, 10) || 1));
+    const mistakes = (Array.isArray(body.mistakes) ? body.mistakes : []).slice(0, 5).map(m => wsClean(m, 150)).filter(Boolean);
+    if (!subject) return json(400, {error: 'Write what you want to learn (and keep it friendly).'}, cors);
+    if (!(await bump(a.d, `ai:${today()}:all`, WS_AI_DAILY_TOTAL))) {
+        return json(429, {error: 'The AI has made all its free worksheets for today. Try again tomorrow, or practise a built-in course!', noAi: true}, cors);
+    }
+    if (!(await bump(a.d, `ai:${today()}:${a.me}`, WS_AI_DAILY_USER))) {
+        return json(429, {error: 'That\'s all your AI worksheets for today. Come back tomorrow!'}, cors);
+    }
+    await a.d.prepare('DELETE FROM ws_rate WHERE k LIKE ? AND k NOT LIKE ?').bind('ai:%', `ai:${today()}:%`).run();
+    const system = 'You write short, friendly practice worksheets for children and teenagers on a kids website. ' +
+        'Only school-appropriate content. Reply with JSON only, no other text, in this shape: ' +
+        '{"title":"...","questions":[{"q":"question","options":["a","b","c","d"],"answer":0,"explain":"one short sentence"},' +
+        '{"q":"question with one short exact answer","answer":"word or number","explain":"..."}]}. ' +
+        'Make 8 questions: mostly multiple choice with 4 different options (answer is the index of the right option), and 2 or 3 typed answers of one word or number. ' +
+        'Every answer must be correct. Questions must not repeat.';
+    const user = `Subject: ${subject}\nLevel: ${level} of 10 (1 = complete beginner, 10 = advanced)\n` +
+        (goal ? `What the learner wants: ${goal}\n` : '') +
+        (mistakes.length ? `Include practice on things they got wrong before: ${mistakes.join(' | ')}\n` : '') +
+        `Worksheet for ${today()}. Make it different from other days.`;
+    let result;
+    try {
+        result = await env.AI.run(WS_AI_MODEL, {messages: [{role: 'system', content: system}, {role: 'user', content: user}], max_tokens: 1800, temperature: 0.7});
+    } catch (e) {
+        return json(502, {error: 'The AI is busy right now. Try again in a minute.'}, cors);
+    }
+    const raw = typeof result === 'string' ? result : (result && (result.response || (result.result && result.result.response))) || '';
+    const questions = wsQuestions(typeof raw === 'object' ? JSON.stringify(raw) : raw);
+    if (questions.length < 4) return json(502, {error: 'The AI made a messy worksheet. Press try again.'}, cors);
+    let title = '';
+    try { title = wsClean(JSON.parse(String(raw).slice(String(raw).indexOf('{'), String(raw).lastIndexOf('}') + 1)).title, 80) || ''; } catch (e) { /* no title */ }
+    return json(200, {title: title || subject, questions}, cors);
+};
+
+const handleWsFeedback = async (request, env, cors) => {
+    const a = await needAccount(request, env, cors);
+    if (a.error) return a.error;
+    let body;
+    try { body = await request.json(); } catch (e) { return json(400, {error: 'Bad request'}, cors); }
+    if (!(await bump(a.d, `fb:${today()}:${a.me}`, 30))) return json(429, {error: 'Thanks, that\'s enough for today!'}, cors);
+    await a.d.prepare('INSERT INTO ws_feedback (login, course, question, note, created) VALUES (?, ?, ?, ?, ?)')
+        .bind(a.me, cleanText(body.course, 120), cleanText(body.question, 400), cleanText(body.note, 300), Date.now()).run();
+    return json(200, {ok: true}, cors);
+};
+
+// ----- Web Store
+
+const storeUrl = value => {
+    try {
+        const u = new URL(String(value || '').trim());
+        if (u.protocol !== 'https:' || u.username || u.password) return null;
+        return u.toString().slice(0, 400);
+    } catch (e) {
+        return null;
+    }
+};
+
+const storeImageOk = data => typeof data === 'string' && data.length <= STORE_IMG_MAX && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(data);
+
+const storeCard = (row, base, ratings) => {
+    const r = ratings && ratings[row.id];
+    return {
+        id: row.id, owner: row.owner, name: row.name, tagline: row.tagline || '', description: row.description || '',
+        category: row.category, platforms: (row.platforms || '').split(',').filter(Boolean), url: row.url,
+        status: row.status, note: row.note || '', updated: row.updated,
+        icon: `${base}/store/img/${row.id}/0?v=${row.version}`,
+        shots: Array.from({length: row.shots}, (x, i) => `${base}/store/img/${row.id}/${i + 1}?v=${row.version}`),
+        stars: r ? Math.round(r.avg * 10) / 10 : 0, votes: r ? r.n : 0
+    };
+};
+
+const storeRatings = async (d, ids) => {
+    if (!ids.length) return {};
+    const rows = (await d.prepare(`SELECT app, AVG(stars) AS avg, COUNT(*) AS n FROM store_ratings WHERE app IN (${ids.map(() => '?').join(',')}) GROUP BY app`).bind(...ids).all()).results || [];
+    const out = {};
+    for (const r of rows) out[r.app] = r;
+    return out;
+};
+
+const handleStoreApps = async (request, env, cors, base, url) => {
+    const d = await extraDb(env);
+    if (!d) return json(200, {apps: [], off: true}, cors);
+    const by = lc(url.searchParams.get('by') || '');
+    let rows;
+    if (url.searchParams.get('mine')) {
+        const user = await sessionUser(request, env);
+        if (!user) return json(401, {error: 'Sign in with GitHub first.'}, cors);
+        rows = (await d.prepare('SELECT * FROM store_apps WHERE owner = ? ORDER BY updated DESC').bind(lc(user.login)).all()).results || [];
+    } else if (by) {
+        rows = (await d.prepare('SELECT * FROM store_apps WHERE owner = ? AND status = ? ORDER BY updated DESC LIMIT 50').bind(by, 'approved').all()).results || [];
+    } else {
+        rows = (await d.prepare('SELECT * FROM store_apps WHERE status = ? ORDER BY updated DESC LIMIT 200').bind('approved').all()).results || [];
+    }
+    const ratings = await storeRatings(d, rows.map(r => r.id));
+    return json(200, {apps: rows.map(r => storeCard(r, base, ratings))}, {...cors, 'cache-control': 'no-store'});
+};
+
+const handleStoreImage = async (env, id, n) => {
+    const d = await extraDb(env);
+    if (!d) return new Response('Not found', {status: 404});
+    const row = await d.prepare('SELECT data FROM store_images WHERE app = ? AND n = ?').bind(id, n).first();
+    if (!row) return new Response('Not found', {status: 404});
+    const m = /^data:(image\/[a-z]+);base64,(.*)$/.exec(row.data);
+    const bytes = Uint8Array.from(atob(m[2]), c => c.charCodeAt(0));
+    return new Response(bytes, {headers: {'content-type': m[1], 'cache-control': 'public, max-age=86400', 'access-control-allow-origin': '*', 'x-content-type-options': 'nosniff'}});
+};
+
+const handleStoreSubmit = async (request, env, cors, base) => {
+    const a = await needAccount(request, env, cors);
+    if (a.error) return a.error;
+    const text = await request.text();
+    if (text.length > STORE_IMG_MAX * 4 + 20000) return json(413, {error: 'The pictures are too big.'}, cors);
+    let body;
+    try { body = JSON.parse(text); } catch (e) { return json(400, {error: 'Bad request'}, cors); }
+    const name = wsClean(body.name, 40), tagline = wsClean(body.tagline || '', 80), description = wsClean(body.description || '', 1500);
+    if (!name) return json(400, {error: 'Give your app a friendly name.'}, cors);
+    if (tagline === null || description === null) return json(400, {error: 'Please keep the words friendly.'}, cors);
+    const url = storeUrl(body.url);
+    if (!url) return json(400, {error: 'Add a link that starts with https:// to where people get your app.'}, cors);
+    const category = STORE_CATEGORIES.includes(body.category) ? body.category : 'other';
+    const platforms = (Array.isArray(body.platforms) ? body.platforms : []).filter(p => STORE_PLATFORMS.includes(p));
+    if (!platforms.length) return json(400, {error: 'Pick at least one device your app works on.'}, cors);
+    const shots = (Array.isArray(body.shots) ? body.shots : []).slice(0, 3);
+    if (shots.some(s => !storeImageOk(s))) return json(400, {error: 'One of the screenshots isn\'t a picture.'}, cors);
+    const now = Date.now();
+    let id = String(body.id || '');
+    let existing = null;
+    if (id) {
+        existing = await a.d.prepare('SELECT * FROM store_apps WHERE id = ?').bind(id).first();
+        if (!existing || existing.owner !== a.me) return json(403, {error: 'That isn\'t your app.'}, cors);
+    } else {
+        const count = await a.d.prepare('SELECT COUNT(*) AS n FROM store_apps WHERE owner = ?').bind(a.me).first();
+        if (count.n >= STORE_PER_USER) return json(429, {error: `You can have up to ${STORE_PER_USER} apps.`}, cors);
+        if (!(await bump(a.d, `st:${today()}:${a.me}`, 5))) return json(429, {error: 'That\'s enough new apps for today.'}, cors);
+        id = Array.from(crypto.getRandomValues(new Uint8Array(6)), b => (b % 36).toString(36)).join('');
+    }
+    const icon = body.icon;
+    if (!existing && !storeImageOk(icon)) return json(400, {error: 'Add an icon for your app.'}, cors);
+    if (icon && !storeImageOk(icon)) return json(400, {error: 'The icon isn\'t a picture.'}, cors);
+    const stmts = [];
+    if (existing) {
+        const keepShots = body.keepShots && !shots.length;
+        stmts.push(a.d.prepare('UPDATE store_apps SET name = ?, tagline = ?, description = ?, category = ?, platforms = ?, url = ?, status = ?, note = NULL, shots = ?, version = version + 1, updated = ? WHERE id = ?')
+            .bind(name, tagline, description, category, platforms.join(','), url, 'pending', keepShots ? existing.shots : shots.length, now, id));
+        if (!keepShots) stmts.push(a.d.prepare('DELETE FROM store_images WHERE app = ? AND n > 0').bind(id));
+    } else {
+        stmts.push(a.d.prepare('INSERT INTO store_apps (id, owner, name, tagline, description, category, platforms, url, status, shots, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+            .bind(id, a.me, name, tagline, description, category, platforms.join(','), url, 'pending', shots.length, now, now));
+    }
+    if (icon) stmts.push(a.d.prepare('INSERT OR REPLACE INTO store_images (app, n, data) VALUES (?, 0, ?)').bind(id, icon));
+    shots.forEach((s, i) => stmts.push(a.d.prepare('INSERT OR REPLACE INTO store_images (app, n, data) VALUES (?, ?, ?)').bind(id, i + 1, s)));
+    await a.d.batch(stmts);
+    return json(200, {ok: true, id, message: 'Sent! The owner will check your app, then it shows up in the Web Store.'}, cors);
+};
+
+const handleStoreDelete = async (request, env, cors) => {
+    const a = await needAccount(request, env, cors);
+    if (a.error) return a.error;
+    let body;
+    try { body = await request.json(); } catch (e) { return json(400, {error: 'Bad request'}, cors); }
+    const row = await a.d.prepare('SELECT owner FROM store_apps WHERE id = ?').bind(String(body.id || '')).first();
+    if (!row || row.owner !== a.me) return json(403, {error: 'That isn\'t your app.'}, cors);
+    await a.d.batch(['store_apps WHERE id', 'store_images WHERE app', 'store_ratings WHERE app', 'store_reports WHERE app']
+        .map(t => a.d.prepare(`DELETE FROM ${t} = ?`).bind(String(body.id))));
+    return json(200, {ok: true}, cors);
+};
+
+const handleStoreRate = async (request, env, cors) => {
+    const a = await needAccount(request, env, cors);
+    if (a.error) return a.error;
+    let body;
+    try { body = await request.json(); } catch (e) { return json(400, {error: 'Bad request'}, cors); }
+    const stars = parseInt(body.stars, 10);
+    if (!(stars >= 1 && stars <= 5)) return json(400, {error: 'Pick 1 to 5 stars.'}, cors);
+    const row = await a.d.prepare('SELECT owner FROM store_apps WHERE id = ? AND status = ?').bind(String(body.id || ''), 'approved').first();
+    if (!row) return json(404, {error: 'App not found.'}, cors);
+    if (row.owner === a.me) return json(400, {error: 'You can\'t rate your own app.'}, cors);
+    await a.d.prepare('INSERT INTO store_ratings (app, login, stars) VALUES (?, ?, ?) ON CONFLICT(app, login) DO UPDATE SET stars = excluded.stars').bind(String(body.id), a.me, stars).run();
+    const r = (await storeRatings(a.d, [String(body.id)]))[String(body.id)];
+    return json(200, {ok: true, stars: Math.round(r.avg * 10) / 10, votes: r.n}, cors);
+};
+
+const handleStoreReport = async (request, env, cors) => {
+    const a = await needAccount(request, env, cors);
+    if (a.error) return a.error;
+    let body;
+    try { body = await request.json(); } catch (e) { return json(400, {error: 'Bad request'}, cors); }
+    if (!(await bump(a.d, `rp:${today()}:${a.me}`, 10))) return json(429, {error: 'Thanks, that\'s enough reports for today.'}, cors);
+    await a.d.prepare('INSERT INTO store_reports (app, login, reason, created) VALUES (?, ?, ?, ?)').bind(String(body.id || '').slice(0, 20), a.me, cleanText(body.reason, 300), Date.now()).run();
+    return json(200, {ok: true, message: 'Thanks for telling us. The owner will check it.'}, cors);
+};
+
+const handleStoreOwner = async (request, env, cors, base) => {
+    if (!isOwner(request, env)) return json(403, {error: 'Owner only.'}, cors);
+    const d = await extraDb(env);
+    if (!d) return json(503, {error: 'No SH_DB database.'}, cors);
+    let body = {};
+    try { body = await request.json(); } catch (e) { /* list */ }
+    const id = String(body.id || '');
+    if (body.action === 'approve' && id) await d.prepare('UPDATE store_apps SET status = ?, note = NULL WHERE id = ?').bind('approved', id).run();
+    if (body.action === 'reject' && id) await d.prepare('UPDATE store_apps SET status = ?, note = ? WHERE id = ?').bind('rejected', cleanText(body.note, 300), id).run();
+    if (body.action === 'remove' && id) {
+        await d.batch(['store_apps WHERE id', 'store_images WHERE app', 'store_ratings WHERE app', 'store_reports WHERE app'].map(t => d.prepare(`DELETE FROM ${t} = ?`).bind(id)));
+    }
+    if (body.action === 'dismiss' && body.report) await d.prepare('DELETE FROM store_reports WHERE id = ?').bind(parseInt(body.report, 10) || 0).run();
+    const pending = (await d.prepare('SELECT * FROM store_apps WHERE status = ? ORDER BY updated LIMIT 100').bind('pending').all()).results || [];
+    const reports = (await d.prepare('SELECT r.id, r.app, r.login, r.reason, r.created, a.name FROM store_reports r LEFT JOIN store_apps a ON a.id = r.app ORDER BY r.created DESC LIMIT 100').all()).results || [];
+    const feedback = (await d.prepare('SELECT login, course, question, note, created FROM ws_feedback ORDER BY id DESC LIMIT 50').all()).results || [];
+    return json(200, {pending: pending.map(r => storeCard(r, base)), reports, feedback}, cors);
+};
+
 // ---------------------------------------------------------------- router
 
 export default {
@@ -1281,6 +1617,10 @@ export default {
             if (cw) return handleChatRead(request, env, cors, cw[1], url);
             if (path === '/swiss/search') return handleSwissSearch(env, cors, url);
             if (path === '/swiss/stats') return handleSwissStats(env, cors);
+            if (path === '/ws/load') return handleWsLoad(request, env, cors);
+            if (path === '/store/apps') return handleStoreApps(request, env, cors, base, url);
+            const si = /^\/store\/img\/([a-z0-9]{4,20})\/([0-3])$/.exec(path);
+            if (si) return handleStoreImage(env, si[1], +si[2]);
             if (path === '/hub/list') return handleList(env, cors);
             const m = /^\/hub\/(info|file|thumb)\/([a-z0-9]{4,20})$/.exec(path);
             if (m) return m[1] === 'info' ? handleInfo(env, cors, m[2]) : handleFile(env, cors, m[2], m[1]);
@@ -1308,6 +1648,14 @@ export default {
         if (path === '/owner/reports') return handleOwnerReports(request, env, cors);
         if (path === '/swiss/suggest') return handleSwissSuggest(request, env, cors);
         if (path === '/owner/swiss') return handleSwissOwner(request, env, cors);
+        if (path === '/ws/save') return handleWsSave(request, env, cors);
+        if (path === '/ws/generate') return handleWsGenerate(request, env, cors);
+        if (path === '/ws/feedback') return handleWsFeedback(request, env, cors);
+        if (path === '/store/submit') return handleStoreSubmit(request, env, cors, base);
+        if (path === '/store/delete') return handleStoreDelete(request, env, cors);
+        if (path === '/store/rate') return handleStoreRate(request, env, cors);
+        if (path === '/store/report') return handleStoreReport(request, env, cors);
+        if (path === '/owner/store') return handleStoreOwner(request, env, cors, base);
         return json(404, {error: 'Not found'}, cors);
     },
 
