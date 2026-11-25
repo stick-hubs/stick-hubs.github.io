@@ -1,4 +1,1 @@
-{
-  "version": "1.0.1",
-  "notes": "New: Ask about this page in the Claude panel."
-}
+{"version":"1.0.2","notes":"Fixed: closing tabs and bookmarks now work while a page is still loading."}

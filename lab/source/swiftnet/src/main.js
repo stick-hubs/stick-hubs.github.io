@@ -658,11 +658,14 @@ class SwiftWindow {
     }
 
     sendState () {
-        if (this.win.isDestroyed() || this.wc.isLoading()) return;
+        if (this.win.isDestroyed()) return;
         clearTimeout(this.stateTimer);
+        // never drop an update: if the frame is still starting, try again a moment later
         this.stateTimer = setTimeout(() => {
-            if (!this.win.isDestroyed()) this.wc.send('state', this.state());
-        }, 16);
+            if (this.win.isDestroyed()) return;
+            if (this.wc.isLoading()) this.sendState();
+            else this.wc.send('state', this.state());
+        }, this.wc.isLoading() ? 100 : 16);
     }
 
     saveSession () {

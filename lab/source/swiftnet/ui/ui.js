@@ -6,6 +6,7 @@
   var state = null;
   var editing = false;
   var dlHidden = false;
+  var dragId = null;
   var platform = new URLSearchParams(location.search).get('platform') || '';
   if (platform === 'darwin') document.body.classList.add('mac');
 
@@ -37,19 +38,49 @@
   new ResizeObserver(reportLayout).observe($('chrome'));
 
   // ---------- tabs ----------
+  // Tabs are updated in place (not redrawn), so a click that starts while a page is loading
+  // still lands on the same button when the mouse is released.
+  function setHtml(el, html) { if (el._html !== html) { el._html = html; el.innerHTML = html; } }
   function renderTabs() {
     var box = $('tabs');
     var avail = document.body.clientWidth - (platform === 'darwin' ? 72 : 30) - 40 - 70 - (platform === 'darwin' ? 0 : 140);
     var w = Math.max(44, Math.min(220, Math.floor(avail / Math.max(1, state.tabs.length))));
-    box.innerHTML = state.tabs.map(function (t) {
-      var fav = t.loading ? '<span class="spin"></span>' :
-        /^swiftnet:/.test(t.url) ? SN : (safeImg(t.favicon) ? '<img class="favimg" alt="" src="' + esc(safeImg(t.favicon)) + '">' : GLOBE);
-      return '<div class="tab' + (t.id === state.active ? ' active' : '') + (w < 80 ? ' narrow' : '') + '" role="tab" draggable="true" aria-selected="' + (t.id === state.active) + '" data-id="' + t.id + '" title="' + esc(t.title) + '" style="width:' + w + 'px;flex-basis:' + w + 'px">' +
-        '<span class="fav">' + fav + '</span><span class="title">' + esc(t.title || prettyUrl(t.url)) + '</span>' + (t.audible ? SPEAKER : '') +
-        '<button class="x" data-close="' + t.id + '" title="Close tab (Ctrl+W)" aria-label="Close tab">' + X + '</button></div>';
-    }).join('');
-    box.querySelectorAll('img.favimg').forEach(function (img) {
-      img.addEventListener('error', function () { img.outerHTML = GLOBE; });
+    var keep = {};
+    state.tabs.forEach(function (t, i) {
+      keep[t.id] = true;
+      var el = box.querySelector('.tab[data-id="' + t.id + '"]');
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'tab';
+        el.setAttribute('role', 'tab');
+        el.setAttribute('draggable', 'true');
+        el.setAttribute('data-id', t.id);
+        el.innerHTML = '<span class="fav"></span><span class="title"></span><span class="aud"></span>' +
+          '<button class="x" draggable="false" data-close="' + t.id + '" title="Close tab (Ctrl+W)" aria-label="Close tab">' + X + '</button>';
+      }
+      if (box.children[i] !== el) box.insertBefore(el, box.children[i] || null);
+      var cls = 'tab' + (t.id === state.active ? ' active' : '') + (w < 80 ? ' narrow' : '') + (t.id === dragId ? ' dragging' : '');
+      if (el.className !== cls) el.className = cls;
+      el.setAttribute('aria-selected', String(t.id === state.active));
+      if (el.title !== (t.title || '')) el.title = t.title || '';
+      if (el.style.width !== w + 'px') { el.style.width = w + 'px'; el.style.flexBasis = w + 'px'; }
+      var favUrl = safeImg(t.favicon);
+      var fav = t.loading ? '<span class="spin"></span>' : /^swiftnet:/.test(t.url) ? SN :
+        (favUrl && !el._badFav ? '<img class="favimg" alt="" src="' + esc(favUrl) + '">' : GLOBE);
+      if (el._favUrl !== favUrl) { el._favUrl = favUrl; el._badFav = false; }
+      var favEl = el.children[0];
+      setHtml(favEl, fav);
+      var img = favEl.querySelector('img.favimg');
+      if (img && !img._wired) {
+        img._wired = true;
+        img.addEventListener('error', function () { el._badFav = true; favEl._html = GLOBE; favEl.innerHTML = GLOBE; });
+      }
+      var title = t.title || prettyUrl(t.url);
+      if (el.children[1].textContent !== title) el.children[1].textContent = title;
+      setHtml(el.children[2], t.audible ? SPEAKER : '');
+    });
+    Array.prototype.slice.call(box.children).forEach(function (el) {
+      if (!keep[+el.getAttribute('data-id')]) box.removeChild(el);
     });
   }
 
@@ -60,16 +91,22 @@
     if (e.button === 1) { e.preventDefault(); S.command('closeTab', id); return; }
     if (e.button === 0 && !e.target.closest('[data-close]')) S.command('activate', id);
   });
-  $('tabs').addEventListener('click', function (e) {
+  var pressClose = null;
+  $('tabs').addEventListener('pointerdown', function (e) {
     var c = e.target.closest('[data-close]');
-    if (c) S.command('closeTab', +c.getAttribute('data-close'));
+    pressClose = c && e.button === 0 ? +c.getAttribute('data-close') : null;
+  });
+  $('tabs').addEventListener('pointerup', function (e) {
+    var c = e.target.closest('[data-close]');
+    if (c && pressClose !== null && +c.getAttribute('data-close') === pressClose) S.command('closeTab', pressClose);
+    pressClose = null;
   });
   $('tabs').addEventListener('dblclick', function (e) { if (!e.target.closest('.tab')) S.command('max'); });
   // drag tabs to reorder
-  var dragId = null;
-  $('tabs').addEventListener('dragstart', function (e) {
+    $('tabs').addEventListener('dragstart', function (e) {
     var tab = e.target.closest('.tab');
     if (!tab) return;
+    if (pressClose !== null) { e.preventDefault(); return; } // pressing the x never drags the tab
     dragId = +tab.getAttribute('data-id');
     tab.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
@@ -139,11 +176,11 @@
     if (!state.bookmarks) { bar.hidden = true; document.body.classList.remove('has-bookmarks'); return; }
     bar.hidden = false;
     document.body.classList.add('has-bookmarks');
-    bar.innerHTML = state.bookmarks.length ? state.bookmarks.map(function (b, i) {
+    setHtml(bar, state.bookmarks.length ? state.bookmarks.map(function (b, i) {
       var host = '';
       try { host = new URL(b.url).hostname; } catch (e) {}
       return '<button class="bm" data-bm="' + i + '" title="' + esc(b.title + '\n' + b.url) + '">' + GLOBE + '<span>' + esc(b.title || host) + '</span></button>';
-    }).join('') : '<span class="bm-empty">Press the star in the address bar to add bookmarks here.</span>';
+    }).join('') : '<span class="bm-empty">Press the star in the address bar to add bookmarks here.</span>');
   }
   $('bookmarks').addEventListener('click', function (e) {
     var b = e.target.closest('[data-bm]');
@@ -201,7 +238,7 @@
     var show = list.length && !dlHidden;
     bar.hidden = !show;
     if (show) {
-      bar.innerHTML = list.map(function (d) {
+      setHtml(bar, list.map(function (d) {
         var pct = d.total ? Math.round(100 * d.received / d.total) : 0;
         var status = d.state === 'completed' ? size(d.received) + ' &middot; Done' : d.state === 'cancelled' ? 'Cancelled' : d.state === 'interrupted' ? 'Failed' :
           (d.paused ? 'Paused &middot; ' : '') + size(d.received) + (d.total ? ' of ' + size(d.total) : '');
@@ -210,7 +247,7 @@
         return '<div class="dl"><svg class="ic" viewBox="0 0 26 26"><path d="M6 2 H16 L21 7 V24 H6 Z" fill="#fff" stroke="#7d8fa6"/><path d="M16 2 V7 H21" fill="none" stroke="#7d8fa6"/><path d="M13.5 10 V19 M10 15.5 L13.5 19 L17 15.5" fill="none" stroke="#2a8fd8" stroke-width="1.8"/></svg>' +
           '<div class="info"><div class="nm" title="' + esc(d.name) + '">' + esc(d.name) + '</div><div class="st">' + status + '</div>' +
           (d.state === 'progressing' ? '<div class="bar"><i style="width:' + pct + '%"></i></div>' : '') + '</div>' + actions + '</div>';
-      }).join('') + '<button id="dl-all" title="See all downloads">Show all</button><button id="dl-close" title="Close" aria-label="Close downloads bar">' + X + '</button>';
+      }).join('') + '<button id="dl-all" title="See all downloads">Show all</button><button id="dl-close" title="Close" aria-label="Close downloads bar">' + X + '</button>');
     }
     reportLayout();
   }
@@ -256,8 +293,8 @@
     if (s.update) { $('update').textContent = 'Update to ' + s.update.version; $('update').title = s.update.notes || 'A new SwiftNet is out'; }
     var maxBtn = document.querySelector('[data-cmd=max]');
     maxBtn.title = s.maximized ? 'Restore down' : 'Maximize';
-    maxBtn.innerHTML = s.maximized ? '<svg viewBox="0 0 10 10"><rect x="1" y="3" width="6" height="6" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M3 3 V1 H9 V7 H7" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>' :
-      '<svg viewBox="0 0 10 10"><rect x="1.2" y="1.2" width="7.6" height="7.6" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>';
+    setHtml(maxBtn, s.maximized ? '<svg viewBox="0 0 10 10"><rect x="1" y="3" width="6" height="6" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M3 3 V1 H9 V7 H7" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>' :
+      '<svg viewBox="0 0 10 10"><rect x="1.2" y="1.2" width="7.6" height="7.6" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>');
     reportLayout();
   });
   window.addEventListener('resize', function () { if (state) renderTabs(); });

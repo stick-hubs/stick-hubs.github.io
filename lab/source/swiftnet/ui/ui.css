@@ -8,7 +8,9 @@ svg { width: 16px; height: 16px; flex: none; }
 #chrome { position: relative; z-index: 2; }
 
 /* ---------- title bar with tabs ---------- */
-#titlebar { height: 38px; display: flex; align-items: flex-end; padding: 0 0 0 6px; -webkit-app-region: drag; }
+#titlebar { height: 38px; display: flex; align-items: flex-end; padding: 0 0 0 6px; }
+#titlebar .drag, #titlebar #logo, #titlebar #mac-space { -webkit-app-region: drag; }
+#titlebar .drag { align-self: stretch; }
 #mac-space { width: 72px; display: none; }
 body.mac #mac-space { display: block; }
 body.mac #caption, body.mac #logo { display: none; }
@@ -23,8 +25,10 @@ body.mac #caption, body.mac #logo { display: none; }
 .tab .x { width: 18px; height: 18px; border-radius: 3px; flex: none; opacity: .75; }
 .tab .x svg { width: 9px; height: 9px; }
 .tab .x:hover { opacity: 1; }
+.tab .aud { display: flex; flex: none; }
+.tab .aud:empty { display: none; }
 .tab .audio { width: 14px; height: 14px; opacity: .7; }
-.tab.narrow .title, .tab.narrow .audio { display: none; }
+.tab.narrow .title, .tab.narrow .aud { display: none; }
 .tab.narrow { padding: 0; justify-content: center; }
 .tab.narrow:not(.active) .x { display: none; }
 .tab.dragging { opacity: .5; }
